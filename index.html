@@ -23,7 +23,7 @@
     border-right: 1px solid var(--line); padding: 16px 16px 24px; }
   #mapWrap { flex: 1; min-width: 0; position: relative; display: flex; }
   #map { flex: 1; min-width: 0; }
-  #map.sv-modo canvas { cursor: crosshair !important; }
+  #map.sv-modo canvas, #map.medir-modo canvas { cursor: crosshair !important; }
   /* Selector de mapa base (control sobre el mapa) */
   /* Panel lateral derecho (capas y leyenda) */
   #panelDer { width: 260px; flex: none; overflow-y: auto; background: var(--surface);
@@ -78,6 +78,34 @@
   .ctl-sv { width: 29px; height: 29px; display: grid; place-items: center; cursor: pointer; }
   .ctl-sv[aria-pressed="true"] { background: #fab219 !important; }
   .sv-marker { width: 28px; height: 28px; }
+  /* Medición de distancia y área */
+  .ctl-medir { width: 29px; height: 29px; display: grid; place-items: center; cursor: pointer; }
+  .ctl-medir[aria-pressed="true"] { background: #e8f0fb !important; }
+  .medir-info { background: var(--surface); border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.18);
+    padding: 8px 10px; font-size: 12px; color: var(--ink-2); max-width: 260px; line-height: 1.4; }
+  .medir-info[hidden] { display: none; }
+  .medir-info b { display: block; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .medir-info .acc { display: flex; gap: 6px; margin-top: 6px; }
+  .medir-info .acc button { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 11.5px; padding: 2px 8px; color: var(--ink-2); }
+  .medir-info .acc button:hover { background: #f0efec; }
+  .medir-info.ancho { max-width: none; }
+  .perfil-datos { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; margin-top: 4px; font-size: 11.5px; }
+  .perfil-datos span:nth-child(even) { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #perfil { position: relative; margin-top: 6px; }
+  #perfil:empty { display: none; }
+  #perfil svg { display: block; touch-action: none; }
+  #perfil text { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  #perfil .grid { stroke: var(--line); stroke-width: 1; }
+  #perfil .area { fill: var(--accent); fill-opacity: .14; }
+  #perfil .linea { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  #perfil .cursor line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 2; }
+  #perfil .cursor circle { fill: var(--accent); stroke: #fff; stroke-width: 2; }
+  .perfil-tip { position: absolute; top: -4px; background: var(--ink); color: #fff; font-size: 11px; padding: 2px 7px;
+    border-radius: 4px; white-space: nowrap; pointer-events: none; }
+  .perfil-tip b { display: inline; font-size: inherit; color: #fff; }
+  .perfil-marca { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2.5px solid #fff;
+    box-shadow: 0 0 0 1.5px var(--ink); }
   .pop a { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 6px; }
   h1 { font-size: 17px; margin: 0 0 2px; }
   .sub { font-size: 12px; color: var(--ink-2); margin: 0 0 14px; line-height: 1.4; }
@@ -550,8 +578,8 @@ const TRAZO = Object.fromEntries(["continuo", "guiones", "puntos"].map(k =>
   [k, k === "continuo" ? ["!", ["in", ["get", "trazo"], ["literal", ["guiones", "puntos"]]]] : ["==", ["get", "trazo"], k]]));
 
 map.on("load", () => {
-  map.addSource("ex", { type: "geojson", data: D.geo.existentes });
-  map.addSource("sis", { type: "geojson", data: D.geo.sistemas });
+  map.addSource("ex", { type: "geojson", data: D.geo.existentes, generateId: true });   // id = índice: geometría completa para el perfil
+  map.addSource("sis", { type: "geojson", data: D.geo.sistemas, generateId: true });
   map.addSource("br", { type: "geojson", data: D.geo.brechas });
 
   map.addLayer({ id: "ex-base", type: "line", source: "ex",
@@ -560,7 +588,7 @@ map.on("load", () => {
   map.addLayer({ id: "sis-otros", type: "line", source: "sis",
     paint: { "line-color": "#6e6d68", "line-width": 2.5, "line-opacity": 0.35 } });
   for (const c of CAPAS_REF) {   // líneas de referencia: debajo de la red activada y los sistemas
-    if (!map.getSource(`ref-${c.fuente}`)) map.addSource(`ref-${c.fuente}`, { type: "geojson", data: REF[c.fuente] });
+    if (!map.getSource(`ref-${c.fuente}`)) map.addSource(`ref-${c.fuente}`, { type: "geojson", data: REF[c.fuente], generateId: true });
     if (esPunto(c)) continue;
     map.addLayer({ id: c.id, type: "line", source: `ref-${c.fuente}`, ...(c.filtro ? { filter: c.filtro } : {}),
       layout: { visibility: "none", "line-join": "round", ...(c.dash ? {} : { "line-cap": "round" }) },
@@ -646,6 +674,7 @@ map.on("load", () => {
     map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
   }
   map.on("click", e => {
+    if (medir.modo) return clicMedir(e);
     if (modoSV) return abrirSV(e.lngLat, rumboCercano(e.point));
     // clic en un círculo agrupado: acercar hasta que se separe
     const capasGrupo = CAPAS_REF.filter(c => c.tipo === "cluster" && map.getLayoutProperty(c.id, "visibility") === "visible");
@@ -826,9 +855,17 @@ function popup(e) {
         `${h} ${h == 1 ? "conexión (tributaria directa)" : "conexiones"} · ${fmt(d, 2)} km por la red`]])}`;
   }
   const rumbo = rumboCercano(e.point);
+  const trazo = trazadoCompleto(f, e.lngLat);
   const pop = new maplibregl.Popup({ maxWidth: "320px" }).setLngLat(e.lngLat)
-    .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a></div>`).addTo(map);
+    .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a>
+      ${trazo ? `<br><a href="#" class="perfilLink">⛰ Ver perfil de elevación del tramo</a>` : ""}</div>`).addTo(map);
   pop.getElement().querySelector(".svLink").onclick = ev => { ev.preventDefault(); pop.remove(); abrirSV(e.lngLat, rumbo); };
+  if (trazo) pop.getElement().querySelector(".perfilLink").onclick = ev => {
+    ev.preventDefault(); pop.remove();
+    setModoMedir("perfil");
+    medir.pts = trazo;
+    terminarMedida();
+  };
 }
 
 // ---------- Street View
@@ -848,6 +885,7 @@ class ControlSV {
 map.addControl(new ControlSV(), "top-right");
 
 function setModoSV(on) {
+  if (on) setModoMedir(null);
   modoSV = on;
   document.querySelector(".ctl-sv").setAttribute("aria-pressed", on);
   document.getElementById("map").classList.toggle("sv-modo", on);
@@ -883,6 +921,331 @@ document.getElementById("svCerrar").onclick = () => {
   if (svMarker) svMarker.remove();
   map.resize();
 };
+
+// ---------- Medir distancia y área
+// Clic agrega vértices; clic sobre el último punto (o doble clic) termina; en área, también clic sobre el primero.
+// Retroceso borra el último vértice, Esc sale de la herramienta.
+const medir = { modo: null, pts: [], cursor: null, fin: false, perfil: null, perfilId: 0, marca: null };
+const ICO_MEDIR = {
+  linea: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round">
+    <path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2" stroke-linecap="round"/></svg>`,
+  area: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round">
+    <path d="M4 7 11 3l9 6-3 11H6z" fill="#2a78d6" fill-opacity=".18"/></svg>`,
+  perfil: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round">
+    <path d="M2 19 8 9l4 5 3-4 7 9z" fill="#2a78d6" fill-opacity=".18"/><path d="M2 21h20" stroke-linecap="round"/></svg>` };
+const MIN_PTS = { linea: 2, area: 3, perfil: 2 };
+class ControlMedir {
+  onAdd() {
+    this.c = document.createElement("div");
+    this.c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    this.c.innerHTML = `
+      <button class="ctl-medir" data-modo="linea" title="Medir distancia" aria-label="Medir distancia" aria-pressed="false">${ICO_MEDIR.linea}</button>
+      <button class="ctl-medir" data-modo="area" title="Medir área" aria-label="Medir área" aria-pressed="false">${ICO_MEDIR.area}</button>
+      <button class="ctl-medir" data-modo="perfil" title="Perfil de elevación y pendiente" aria-label="Perfil de elevación"
+        aria-pressed="false">${ICO_MEDIR.perfil}</button>`;
+    this.c.querySelectorAll("button").forEach(b => b.onclick = () =>
+      setModoMedir(medir.modo === b.dataset.modo ? null : b.dataset.modo));
+    return this.c;
+  }
+  onRemove() { this.c.remove(); }
+}
+map.addControl(new ControlMedir(), "top-right");
+class ControlMedirInfo {
+  onAdd() {
+    this.c = document.createElement("div");
+    this.c.className = "maplibregl-ctrl medir-info";
+    this.c.hidden = true;
+    this.c.innerHTML = `<div id="medirTxt"></div><div id="perfil"></div><div class="acc">
+      <button type="button" id="medirBorrar">Borrar</button><button type="button" id="medirSalir">Cerrar</button></div>`;
+    this.c.querySelector("#medirBorrar").onclick = () => {
+      Object.assign(medir, { pts: [], fin: false, cursor: null }); dibujarMedida(); };
+    this.c.querySelector("#medirSalir").onclick = () => setModoMedir(null);
+    return this.c;
+  }
+  onRemove() { this.c.remove(); }
+}
+map.addControl(new ControlMedirInfo(), "bottom-left");
+
+function setModoMedir(modo) {
+  if (modo && modoSV) setModoSV(false);
+  Object.assign(medir, { modo, pts: [], cursor: null, fin: false });
+  document.querySelectorAll(".ctl-medir").forEach(b => b.setAttribute("aria-pressed", b.dataset.modo === modo));
+  document.getElementById("map").classList.toggle("medir-modo", !!modo);
+  document.querySelector(".medir-info").hidden = !modo;
+  modo ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable();
+  dibujarMedida();
+}
+
+function clicMedir(e) {
+  const cerca = (ll, px = 8) => { const p = map.project(ll); return Math.hypot(p.x - e.point.x, p.y - e.point.y) <= px; };
+  if (medir.fin) Object.assign(medir, { pts: [], fin: false, cursor: null });   // un clic tras terminar empieza una medición nueva
+  const n = medir.pts.length;
+  if (n >= MIN_PTS[medir.modo] && (cerca(medir.pts[n - 1]) || (medir.modo === "area" && cerca(medir.pts[0])))) return terminarMedida();
+  if (!(n && cerca(medir.pts[n - 1], 3))) medir.pts.push([e.lngLat.lng, e.lngLat.lat]);
+  dibujarMedida();
+}
+function terminarMedida() {
+  if (medir.fin) return;
+  medir.fin = true;
+  dibujarMedida();
+  if (medir.modo === "perfil") calcularPerfil();
+}
+map.on("mousemove", e => {
+  if (!medir.modo || medir.fin || !medir.pts.length) return;
+  medir.cursor = [e.lngLat.lng, e.lngLat.lat];
+  dibujarMedida();
+});
+map.on("dblclick", () => { if (medir.modo && medir.pts.length >= MIN_PTS[medir.modo]) terminarMedida(); });
+document.addEventListener("keydown", e => {
+  if (!medir.modo || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (e.key === "Escape") setModoMedir(null);
+  else if (e.key === "Backspace" && !medir.fin && medir.pts.length) { medir.pts.pop(); dibujarMedida(); e.preventDefault(); }
+});
+
+// Geodesia: distancia haversine y área de polígono esférico (mismas fórmulas que Turf.js)
+const RAD = Math.PI / 180;
+function distM(a, b) {
+  const dLat = (b[1] - a[1]) * RAD, dLon = (b[0] - a[0]) * RAD;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(h));
+}
+const largoM = pts => pts.slice(1).reduce((s, p, i) => s + distM(pts[i], p), 0);
+function areaM2(pts) {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    s += (b[0] - a[0]) * RAD * (2 + Math.sin(a[1] * RAD) + Math.sin(b[1] * RAD));
+  }
+  return Math.abs(s * 6378137 ** 2 / 2);
+}
+const fmtLargo = m => m < 1000 ? `${fmt(m, 0)} m` : `${fmt(m / 1000, 2)} km`;
+const fmtArea = m2 => m2 < 10000 ? `${fmt(m2, 0)} m²` :
+  m2 < 1e6 ? `${fmt(m2 / 1e4, 2)} ha` : `${fmt(m2 / 1e6, 2)} km² (${fmt(m2 / 1e4, 0)} ha)`;
+
+function dibujarMedida() {
+  const area = medir.modo === "area";
+  const pts = medir.fin || !medir.cursor ? medir.pts : [...medir.pts, medir.cursor];
+  const anillo = area && pts.length >= 3 ? [...pts, pts[0]] : pts;
+  const fs = medir.pts.map(c => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: c } }));
+  if (anillo.length >= 2) fs.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: anillo } });
+  if (area && pts.length >= 3) fs.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [anillo] } });
+  const datos = { type: "FeatureCollection", features: fs };
+  if (map.getSource("medida")) map.getSource("medida").setData(datos);
+  else if (map.isStyleLoaded()) {
+    map.addSource("medida", { type: "geojson", data: datos });
+    map.addLayer({ id: "medida-relleno", type: "fill", source: "medida", filter: ["==", ["geometry-type"], "Polygon"],
+      paint: { "fill-color": "#fab219", "fill-opacity": 0.2 } });
+    map.addLayer({ id: "medida-linea", type: "line", source: "medida", filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#0b0b0b", "line-width": 2.5, "line-dasharray": [2, 1.5] } });
+    map.addLayer({ id: "medida-pto", type: "circle", source: "medida", filter: ["==", ["geometry-type"], "Point"],
+      paint: { "circle-radius": 4.5, "circle-color": "#fab219", "circle-stroke-color": "#0b0b0b", "circle-stroke-width": 1.5 } });
+  }
+  const txt = document.getElementById("medirTxt");
+  if (!txt) return;
+  if (!(medir.modo === "perfil" && medir.fin)) limpiarPerfil();
+  if (!medir.pts.length) {
+    txt.innerHTML = area ? "Haz clic en el mapa para dibujar el polígono." :
+      medir.modo === "perfil" ? "Traza el recorrido con clics; al terminar se muestra su perfil de elevación." :
+      "Haz clic en el mapa para trazar la línea.";
+    return;
+  }
+  if (medir.modo === "perfil" && medir.fin) return;   // el texto lo pone el perfil
+  const ayuda = medir.fin ? "Clic en el mapa para una medición nueva." :
+    "Doble clic o clic en el último punto para terminar · Retroceso borra el último punto.";
+  txt.innerHTML = area
+    ? `<b>${pts.length >= 3 ? fmtArea(areaM2(pts)) : "—"}</b>Perímetro: ${fmtLargo(largoM(anillo))}<br>${ayuda}`
+    : `<b>${fmtLargo(largoM(pts))}</b>${ayuda}`;
+}
+
+// ---------- Perfil de elevación
+// Elevación: teselas Terrarium (AWS Open Data, modelo de terreno global ~30 m en Chile). alto = R·256 + G + B/256 − 32768
+const teselasDEM = new Map();
+function teselaDEM(z, x, y) {
+  const k = `${z}/${x}/${y}`;
+  if (!teselasDEM.has(k)) teselasDEM.set(k, new Promise((ok, mal) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 256;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      ok(g.getImageData(0, 0, 256, 256).data);
+    };
+    img.onerror = () => { teselasDEM.delete(k); mal(new Error(`tesela ${k}`)); };
+    img.src = `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${k}.png`;
+  }));
+  return teselasDEM.get(k);
+}
+// posición en píxeles "de mundo" (Web Mercator) para el zoom z
+function pxMundo([lng, lat], z) {
+  const n = 256 * 2 ** z, s = Math.sin(lat * RAD);
+  return [(lng + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n];
+}
+async function elevaciones(coords, z) {
+  const pos = coords.map(c => pxMundo(c, z).map(v => v - 0.5));   // centro de píxel
+  const claves = new Set();
+  for (const [x, y] of pos) for (const dx of [0, 1]) for (const dy of [0, 1])
+    claves.add(`${Math.floor((Math.floor(x) + dx) / 256)}/${Math.floor((Math.floor(y) + dy) / 256)}`);
+  const tes = {};
+  await Promise.all([...claves].map(async k => { const [x, y] = k.split("/"); tes[k] = await teselaDEM(z, +x, +y); }));
+  const alto = (X, Y) => {
+    const d = tes[`${Math.floor(X / 256)}/${Math.floor(Y / 256)}`], i = ((Y & 255) * 256 + (X & 255)) * 4;
+    return d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;
+  };
+  return pos.map(([x, y]) => {   // interpolación bilineal
+    const X = Math.floor(x), Y = Math.floor(y), fx = x - X, fy = y - Y;
+    return (alto(X, Y) * (1 - fx) + alto(X + 1, Y) * fx) * (1 - fy) + (alto(X, Y + 1) * (1 - fx) + alto(X + 1, Y + 1) * fx) * fy;
+  });
+}
+// pendiente entre los puntos a ~±media metros de i (o el tramo [i, j] si se da j)
+function pendienteEn(p, i, media) {
+  let a = i, b = i;
+  while (a > 0 && p.d[i] - p.d[a] < media) a--;
+  while (b < p.d.length - 1 && p.d[b] - p.d[i] < media) b++;
+  return p.d[b] > p.d[a] ? (p.z[b] - p.z[a]) / (p.d[b] - p.d[a]) : 0;
+}
+
+async function calcularPerfil() {
+  const id = ++medir.perfilId, pts = medir.pts, L = largoM(pts);
+  document.getElementById("medirTxt").innerHTML = `<b>${fmtLargo(L)}</b>Calculando perfil de elevación…`;
+  // muestras equiespaciadas a lo largo del trazado
+  const paso = Math.max(L / 600, 8), d = [], c = [];
+  let acum = 0;
+  for (let s = 0; s < pts.length - 1; s++) {
+    const tramo = distM(pts[s], pts[s + 1]);
+    for (let t = s === 0 ? 0 : (paso - (acum % paso)) % paso; t < tramo; t += paso) {
+      const f = tramo ? t / tramo : 0;
+      d.push(acum + t);
+      c.push([pts[s][0] + (pts[s + 1][0] - pts[s][0]) * f, pts[s][1] + (pts[s + 1][1] - pts[s][1]) * f]);
+    }
+    acum += tramo;
+  }
+  d.push(L); c.push(pts[pts.length - 1]);
+  let bruto;
+  try { bruto = await elevaciones(c, L < 20000 ? 15 : L < 80000 ? 13 : 11); }
+  catch (err) {
+    if (id === medir.perfilId) document.getElementById("medirTxt").innerHTML =
+      `<b>${fmtLargo(L)}</b>No se pudo obtener la elevación (¿sin conexión a internet?).`;
+    return;
+  }
+  if (id !== medir.perfilId) return;   // el trazado cambió mientras se descargaba
+  // suavizado (media móvil de ±20 m) para no sumar el ruido del modelo de terreno como desnivel
+  const z = bruto.map((_, i) => {
+    let s = 0, n = 0;
+    for (let j = i; j >= 0 && d[i] - d[j] <= 20; j--) { s += bruto[j]; n++; }
+    for (let j = i + 1; j < d.length && d[j] - d[i] <= 20; j++) { s += bruto[j]; n++; }
+    return s / n;
+  });
+  const p = medir.perfil = { d, c, z };
+  p.pend = d.map((_, i) => pendienteEn(p, i, 25));   // pendiente local (tramos de ~50 m)
+  let sube = 0, baja = 0, maxSube = 0, maxBaja = 0, sobre5 = 0;
+  for (let i = 1; i < d.length; i++) {
+    const dz = z[i] - z[i - 1];
+    dz > 0 ? sube += dz : baja -= dz;
+    if (Math.abs(p.pend[i]) > 0.05) sobre5 += d[i] - d[i - 1];
+  }
+  // pendiente máxima sostenida en 100 m (en el sentido del trazado)
+  const ventana = Math.min(100, L);
+  for (let i = 0, j = 0; i < d.length; i++) {
+    while (j < d.length - 1 && d[j] - d[i] < ventana) j++;
+    if (d[j] - d[i] < ventana * 0.99) break;
+    const g = (z[j] - z[i]) / (d[j] - d[i]);
+    maxSube = Math.max(maxSube, g); maxBaja = Math.min(maxBaja, g);
+  }
+  const pct = g => `${g > 0 ? "+" : g < 0 ? "−" : ""}${fmt(Math.abs(g) * 100, 1)} %`;
+  document.getElementById("medirTxt").innerHTML = `<b>${fmtLargo(L)} · pendiente media ${pct((z.at(-1) - z[0]) / L)}</b>
+    <div class="perfil-datos">
+      <span>Cota inicio → fin</span><span>${fmt(z[0], 0)} → ${fmt(z.at(-1), 0)} m</span>
+      <span>Desnivel acumulado</span><span>+${fmt(sube, 0)} m / −${fmt(baja, 0)} m</span>
+      <span>Pend. máx. (${fmt(ventana, 0)} m)</span><span>subida ${pct(maxSube)} · bajada ${pct(maxBaja)}</span>
+      <span>Con pendiente &gt; 5 %</span><span>${fmtLargo(sobre5)} (${fmt(sobre5 / L * 100, 0)} %)</span>
+    </div>`;
+  graficarPerfil();
+}
+
+function graficarPerfil() {
+  const p = medir.perfil, caja = document.getElementById("perfil"), info = document.querySelector(".medir-info");
+  if (!p) return;
+  info.classList.add("ancho");
+  info.style.width = Math.min(640, map.getContainer().clientWidth - 20) + "px";
+  const W = info.clientWidth - 20, H = 150, m = { l: 42, r: 8, t: 8, b: 20 };
+  const L = p.d.at(-1);
+  // eje Y con al menos 20 m de rango, para no exagerar visualmente terrenos planos
+  let zMin = Math.min(...p.z), zMax = Math.max(...p.z);
+  if (zMax - zMin < 20) { const c = (zMax + zMin) / 2; zMin = c - 10; zMax = c + 10; }
+  const lindo = (rango, n) => { const b = 10 ** Math.floor(Math.log10(rango / n)); return [1, 2, 5, 10].map(k => k * b).find(k => rango / k <= n); };
+  const pasoZ = lindo(zMax - zMin, 4), pasoD = lindo(L, Math.max(2, Math.floor((W - m.l) / 90)));
+  zMin = Math.floor(zMin / pasoZ) * pasoZ; zMax = Math.ceil(zMax / pasoZ) * pasoZ;
+  const X = v => m.l + v / L * (W - m.l - m.r), Y = v => m.t + (zMax - v) / (zMax - zMin) * (H - m.t - m.b);
+  const linea = p.d.map((v, i) => `${i ? "L" : "M"}${X(v).toFixed(1)},${Y(p.z[i]).toFixed(1)}`).join("");
+  const tz = [], td = [];
+  for (let v = zMin; v <= zMax + 1e-9; v += pasoZ) tz.push(v);
+  for (let v = 0; v <= L + 1e-9; v += pasoD) td.push(v);
+  const etD = v => L < 2000 ? `${fmt(v, 0)} m` : `${fmt(v / 1000, pasoD < 1000 ? 1 : 0)} km`;
+  caja.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Perfil de elevación del trazado">
+    ${tz.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/>
+      <text x="${m.l - 5}" y="${Y(v) + 3.5}" text-anchor="end">${fmt(v, 0)} m</text>`).join("")}
+    ${td.map(v => `<text x="${X(v)}" y="${H - 5}" text-anchor="${v === 0 ? "start" : "middle"}">${etD(v)}</text>`).join("")}
+    <path d="${linea}L${X(L)},${Y(zMin)}L${X(0)},${Y(zMin)}Z" class="area"/>
+    <path d="${linea}" class="linea"/>
+    <g class="cursor" visibility="hidden"><line y1="${m.t}" y2="${H - m.b}"/><circle r="4"/></g>
+    <rect x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent"/>
+  </svg><div class="perfil-tip" hidden></div>`;
+  const svg = caja.querySelector("svg"), cur = svg.querySelector(".cursor"), tip = caja.querySelector(".perfil-tip");
+  svg.querySelector("rect").onpointermove = e => {
+    const r = svg.getBoundingClientRect(), dist = Math.max(0, Math.min(L, (e.clientX - r.left - m.l) / (W - m.l - m.r) * L));
+    let i = 0;
+    while (i < p.d.length - 1 && p.d[i + 1] <= dist) i++;
+    if (i < p.d.length - 1 && dist - p.d[i] > p.d[i + 1] - dist) i++;
+    const x = X(p.d[i]), y = Y(p.z[i]);
+    cur.setAttribute("visibility", "visible");
+    cur.querySelector("line").setAttribute("x1", x); cur.querySelector("line").setAttribute("x2", x);
+    cur.querySelector("circle").setAttribute("cx", x); cur.querySelector("circle").setAttribute("cy", y);
+    tip.hidden = false;
+    tip.innerHTML = `${fmtLargo(p.d[i])} · <b>${fmt(p.z[i], 0)} m</b> · pendiente ${p.pend[i] >= 0 ? "+" : "−"}${fmt(Math.abs(p.pend[i]) * 100, 1)} %`;
+    tip.style.left = Math.min(Math.max(x - tip.offsetWidth / 2, 0), W - tip.offsetWidth) + "px";
+    if (!medir.marca) {
+      const el = document.createElement("div");
+      el.className = "perfil-marca";
+      medir.marca = new maplibregl.Marker({ element: el });
+    }
+    medir.marca.setLngLat(p.c[i]).addTo(map);
+  };
+  svg.querySelector("rect").onpointerleave = () => {
+    cur.setAttribute("visibility", "hidden"); tip.hidden = true;
+    if (medir.marca) medir.marca.remove();
+  };
+}
+function limpiarPerfil() {
+  medir.perfil = null; medir.perfilId++;   // descarta un cálculo en curso
+  const caja = document.getElementById("perfil"), info = document.querySelector(".medir-info");
+  if (caja) caja.innerHTML = "";
+  if (info) { info.classList.remove("ancho"); info.style.width = ""; }
+  if (medir.marca) medir.marca.remove();
+}
+map.on("resize", () => { if (medir.perfil) graficarPerfil(); });
+
+// Geometría completa (sin recorte de teselas) de una línea clicada, para su perfil. En MultiLineString se unen
+// las partes que se tocan y se usa la cadena más cercana al clic. Devuelve null si no es una línea.
+function trazadoCompleto(f, lngLat) {
+  const datos = f.source === "ex" ? D.geo.existentes : f.source === "sis" ? D.geo.sistemas :
+    f.source.startsWith("ref-") ? REF[f.source.slice(4)] : null;   // puntos (y grupos) quedan fuera: no son líneas
+  const g = f.id != null && datos?.features?.[f.id]?.geometry;
+  if (!g) return null;
+  const partes = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+  const cadenas = [];
+  for (const p of partes.filter(p => p.length >= 2)) {
+    const u = cadenas.at(-1);
+    if (u && distM(u.at(-1), p[0]) < 2) u.push(...p.slice(1));
+    else cadenas.push([...p]);
+  }
+  if (!cadenas.length) return null;
+  const clic = [lngLat.lng, lngLat.lat];
+  const dist = c => Math.min(...c.map(v => distM(v, clic)));
+  return cadenas.reduce((a, b) => dist(b) < dist(a) ? b : a);
+}
 
 // Rumbo (grados desde el norte) del tramo de ciclovía más cercano al punto clicado
 function rumboCercano(pt) {
