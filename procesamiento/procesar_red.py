@@ -246,6 +246,20 @@ def exportar_referencia(crs):
     SALIDA_CAPAS.write_text("window.CAPAS = " + json.dumps(capas, ensure_ascii=False, separators=(",", ":")) + ";\n",
                             encoding="utf-8")
     print(f"OK -> {SALIDA_CAPAS} ({SALIDA_CAPAS.stat().st_size / 1e6:.1f} MB)")
+    marcar_version()
+
+
+def marcar_version():
+    """Pone ?v=<fecha-hora> a los archivos de datos en index.html, para que el navegador no use una copia vieja."""
+    import re
+    from datetime import datetime
+    index = SALIDA.parent.parent / "index.html"
+    v = datetime.now().strftime("%Y%m%d%H%M")
+    html = index.read_text(encoding="utf-8")
+    nuevo = re.sub(r'src="data/(datos|capas)\.js(\?v=\d+)?"', rf'src="data/\1.js?v={v}"', html)
+    if nuevo != html:
+        index.write_text(nuevo, encoding="utf-8", newline="")
+        print(f"Versión de datos en index.html: {v}")
 
 
 def derivar_pasos(g):
