@@ -68,6 +68,8 @@ CAPAS_REFERENCIA = [
     {"id": "pasos", "archivo": ENTRADA / "Pasos_bajo_sobre_nivel_tuneles.geojson", "derivar": lambda g: derivar_pasos(g),
      "campos": ["name", "estructura", "vía"]},
     {"id": "paraderos", "archivo": ENTRADA / "paraderos_bus_GTFS.json", "campos": [], "decimales": 5},
+    {"id": "comunas", "archivo": ENTRADA / "comunas.geojson", "campos": ["COMUNA", "PROVINCIA", "CUT"],
+     "simplificar": 10, "decimales": 5},   # límites comunales: basta precisión de ~10 m
     {"id": "siniestros", "archivo": ENTRADA / "siniestros_bicicleta_2020_2024_RM.geojson", "decimales": 5,
      "derivar": lambda g: derivar_siniestros(g),
      "campos": ["anio", "comuna", "tipo", "tipo_grupo", "causa", "lugar", "ubic", "severidad", "peso",
@@ -239,7 +241,7 @@ def exportar_referencia(crs):
             g["km"] = pd.to_numeric(g["km"], errors="coerce").round(2)
         if g.geom_type.str.contains("Line").any():
             g["km_geom"] = (g.geometry.length / 1000).round(3)   # largo medido (para totales)
-        capas[c["id"]] = a_geojson(g, decimales=c.get("decimales", 6))
+        capas[c["id"]] = a_geojson(g, decimales=c.get("decimales", 6), simplificar=c.get("simplificar", 1.0))
         print(f"Capa de referencia {c['id']}: {len(g)} elementos")
     SALIDA_CAPAS.write_text("window.CAPAS = " + json.dumps(capas, ensure_ascii=False, separators=(",", ":")) + ";\n",
                             encoding="utf-8")
@@ -402,9 +404,9 @@ def calcular_brechas(sis, ex):
         gpd.GeoDataFrame(columns=["largo_m", "geometry"], geometry="geometry", crs=ex.crs)
 
 
-def a_geojson(gdf, decimales=6):
+def a_geojson(gdf, decimales=6, simplificar=1.0):
     g = gdf.copy()
-    g["geometry"] = g.geometry.simplify(1.0)
+    g["geometry"] = g.geometry.simplify(simplificar)
     g = g.to_crs("EPSG:4326")
     fc = json.loads(g.to_json(na="null", drop_id=True))
 
