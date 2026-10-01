@@ -1,0 +1,9 @@
+# Claves privadas (token de Mapbox, etc.): sólo en el computador local
+config.local.js
+
+# Archivos temporales
+__pycache__/
+*.pyc
+_t.html
+_test*.html
+~$*

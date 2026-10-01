@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Red Ciclovías por Sistema</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="data/datos.js"></script>
+<script src="data/capas.js"></script>
+<script src="config.js"></script>
+<script src="config.local.js"></script><!-- claves privadas: sólo existe en el computador local, no se publica -->
+<style>
+  :root {
+    --surface: #fcfcfb; --plane: #f9f9f7; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --accent-ink: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--plane); }
+  #app { display: flex; height: 100vh; height: 100dvh; }
+  #panel { width: 360px; flex: none; overflow-y: auto; background: var(--surface);
+    border-right: 1px solid var(--line); padding: 16px 16px 24px; }
+  #mapWrap { flex: 1; min-width: 0; position: relative; display: flex; }
+  #map { flex: 1; min-width: 0; }
+  #map.sv-modo canvas { cursor: crosshair !important; }
+  /* Selector de mapa base (control sobre el mapa) */
+  /* Panel lateral derecho (capas y leyenda) */
+  #panelDer { width: 260px; flex: none; overflow-y: auto; background: var(--surface);
+    border-left: 1px solid var(--line); padding: 16px 14px 24px; }
+  #panelDer h2:first-child { margin-top: 0; }
+  #panelDer[hidden] { display: none; }
+  #panelDer .cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  #panelDer .cab h2 { margin: 0; }
+  #ocultarDer { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12px; padding: 3px 8px; color: var(--ink-2); }
+  #ocultarDer:hover { background: #f0efec; }
+  #panelDer details.grp { border-top: 1px solid var(--line); padding: 2px 0; }
+  #panelDer details.grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 600; padding: 8px 0 6px; }
+  #panelDer details.grp > summary::-webkit-details-marker { display: none; }
+  #panelDer details.grp > summary::before { content: "▸"; font-size: 11px; color: var(--muted); transition: transform .15s; }
+  #panelDer details.grp[open] > summary::before { transform: rotate(90deg); }
+  #panelDer details.grp .activas { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500;
+    color: var(--accent); font-size: 11px; }
+  .ctl-der { width: 29px; height: 29px; display: grid; place-items: center; cursor: pointer; }
+  .ctl-der[aria-pressed="true"] { background: #e8f0fb !important; }
+  #panelDer label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 3px 0; cursor: pointer; color: var(--ink); }
+  #panelDer label svg { flex: none; }
+  #panelDer label small { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #panelDer .subley { display: none; flex-direction: column; gap: 1px; padding: 0 0 4px 22px; }
+  #panelDer .subley.on { display: flex; }
+  #panelDer .subley span { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-2); }
+  #panelDer .notaCapa { font-size: 11px; color: var(--muted); padding: 0 0 4px 22px; }
+  .ctl-base { position: relative; z-index: 3; }
+  .ctl-base > button { display: grid; place-items: center; width: 34px !important; height: 34px !important; }
+  .base-menu { position: absolute; top: 40px; left: 0; width: 250px; max-height: calc(100vh - 120px); overflow-y: auto;
+    background: var(--surface); border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.18); padding: 6px; z-index: 5; }
+  .base-menu .grupo { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+    font-weight: 600; padding: 8px 8px 2px; }
+  .base-menu[hidden] { display: none; }
+  .base-menu label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; color: var(--ink); }
+  .base-menu label:hover { background: #f0efec; }
+  .base-menu label.off { color: var(--muted); cursor: not-allowed; }
+  .base-menu small { color: var(--muted); font-size: 11px; }
+  .base-menu .hint { font-size: 11px; color: #b4462a; padding: 4px 8px 2px; line-height: 1.4; }
+  .base-menu .hint:empty { display: none; }
+  /* Street View */
+  #sv { width: 45%; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: #000; }
+  #sv[hidden] { display: none; }
+  #svBar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--surface);
+    border-bottom: 1px solid var(--line); font-size: 12px; }
+  #svBar b { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #svBar a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  #svCerrar { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--ink-2); padding: 0 2px; }
+  #svFrame { flex: 1; border: 0; width: 100%; }
+  .ctl-sv { width: 29px; height: 29px; display: grid; place-items: center; cursor: pointer; }
+  .ctl-sv[aria-pressed="true"] { background: #fab219 !important; }
+  .sv-marker { width: 28px; height: 28px; }
+  .pop a { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 6px; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { font-size: 12px; color: var(--ink-2); margin: 0 0 14px; line-height: 1.4; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 18px 0 8px; font-weight: 600; }
+  .sistemas { display: flex; flex-direction: column; gap: 4px; }
+  .sistemas button { text-align: left; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+  .sistemas button:hover { background: #f0efec; }
+  .sistemas button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .sistemas button::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px;
+    border: 1.5px solid currentColor; border-radius: 3px; vertical-align: -1px; }
+  .sistemas button[aria-pressed="true"]::before { content: "✓"; font-size: 10px; line-height: 11px; text-align: center; }
+  .sistemas button.todos::before { border-radius: 50%; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; padding: 6px 4px; border: 0; background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  #play { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #fff;
+    cursor: pointer; font-size: 13px; flex: none; }
+  #umbralTxt { font-size: 13px; font-weight: 600; min-width: 112px; text-align: right; font-variant-numeric: tabular-nums; }
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #fff; }
+  .kpi b { display: block; font-size: 19px; font-weight: 600; }
+  .kpi span { font-size: 11px; color: var(--ink-2); line-height: 1.3; display: block; }
+  .kpi.wide { grid-column: 1 / -1; }
+  label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 5px 0; cursor: pointer; }
+  .ley { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; margin: 6px 0; color: var(--ink-2); }
+  .ley svg { flex: none; margin-top: 3px; }
+  .ley b { font-weight: 600; color: var(--ink); }
+  .ley .def { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
+  .ramp { display: flex; height: 8px; border-radius: 2px; overflow: hidden; margin: 6px 0 2px; }
+  .ramp div { flex: 1; }
+  .rampLbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .ayuda { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; margin: 8px 0 0; }
+  .nota { font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: 18px; }
+  .maplibregl-popup-content { font: 12px system-ui, sans-serif; padding: 10px 12px; }
+  .pop b { font-size: 13px; }
+  .pop table { border-collapse: collapse; margin-top: 4px; }
+  .pop td { padding: 1px 8px 1px 0; vertical-align: top; }
+  .pop td:first-child { color: var(--muted); }
+  #toggle { display: none; }
+  @media (max-width: 720px) {
+    #app { flex-direction: column-reverse; }
+    #panel { width: 100%; height: 46%; border-right: 0; border-top: 1px solid var(--line); }
+    #panel.min { height: auto; max-height: 52px; overflow: hidden; }
+    #toggle { display: block; float: right; border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      font: inherit; font-size: 12px; padding: 4px 8px; }
+    #mapWrap { flex-direction: column; }
+    #sv { width: 100%; height: 50%; border-left: 0; border-top: 1px solid var(--line); }
+    #panelDer { width: 100%; max-height: 30%; border-left: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <button id="toggle">Ocultar panel</button>
+    <h1>Red de ciclovías por Sistema</h1>
+    <p class="sub" id="subtitulo"></p>
+
+    <h2>Sistemas</h2>
+    <p class="ayuda" style="margin:-4px 0 8px">Puedes elegir uno o varios para verlos juntos.</p>
+    <div class="sistemas" id="sistemas"></div>
+
+    <h2>Activación de la red existente</h2>
+    <div class="seg" id="modo">
+      <button data-m="d" aria-pressed="true">Km por la red</button>
+      <button data-m="h" aria-pressed="false">Conexiones</button>
+    </div>
+    <p class="ayuda" id="modoAyuda"></p>
+    <div class="row">
+      <button id="play" title="Animar activación" aria-label="Animar activación">▶</button>
+      <input type="range" id="umbral" min="0" max="10" step="0.5" value="2">
+      <span id="umbralTxt"></span>
+    </div>
+    <div class="ramp" id="ramp"></div>
+    <div class="rampLbl"><span>cerca del sistema</span><span>lejos</span></div>
+
+    <h2>Indicadores</h2>
+    <div class="kpis" id="kpis"></div>
+
+    <p class="nota" id="nota"></p>
+  </aside>
+  <div id="mapWrap">
+    <div id="map"></div>
+    <section id="sv" hidden>
+      <div id="svBar">
+        <b id="svTitulo">Street View</b>
+        <a id="svLink" target="_blank" rel="noopener">Abrir en Google Maps ↗</a>
+        <button id="svCerrar" title="Cerrar Street View" aria-label="Cerrar Street View">×</button>
+      </div>
+      <iframe id="svFrame" title="Google Street View" allowfullscreen loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </section>
+  </div>
+  <aside id="panelDer">
+    <div class="cab"><h2>Categorías del sistema</h2>
+      <button id="ocultarDer" title="Ocultar panel de capas y leyenda">Ocultar ›</button></div>
+    <div id="leyenda"></div>
+    <h2>Capas</h2>
+    <div id="capas"></div>
+  </aside>
+</div>
+
+<script>
+const D = window.DATOS;
+const RAMP = ["#184f95", "#2a78d6", "#5598e7", "#86b6ef", "#b7d3f6"];
+const MODOS = { d: { min: 0, max: 10, step: 0.5, val: 2 }, h: { min: 1, max: 15, step: 1, val: 2 } };
+const estado = { sel: new Set(D.sistemas.filter(s => s.key !== "all").map(s => s.key)),   // al abrir: todos los sistemas
+                modo: "d", umbral: 2 };
+// Selección múltiple de sistemas
+const ORDEN = D.sistemas.filter(s => s.key !== "all").map(s => s.key);
+const elegidos = () => ORDEN.filter(k => estado.sel.has(k));
+const claveCombo = () => elegidos().length === ORDEN.length ? "all" : elegidos().join("+");
+// nivel/distancia de un tramo respecto de los sistemas elegidos = el menor entre ellos
+function minProp(p, pref) {
+  let m = null;
+  for (const k of elegidos()) { const x = p[`${pref}_${k}`]; if (x != null && (m == null || x < m)) m = x; }
+  return m;
+}
+function minExpr(pref) {
+  const a = elegidos().map(k => ["to-number", ["coalesce", ["get", `${pref}_${k}`], 9999]]);
+  return a.length === 0 ? 9999 : a.length === 1 ? a[0] : ["min", ...a];   // sin sistemas: nada activado
+}
+const tipoEstilo = Object.fromEntries(D.tipos.map(t => [t.tipo, t]));
+const fmt = (x, d = 1) => Number(x).toLocaleString("es-CL", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+document.getElementById("subtitulo").textContent =
+  `Red de ciclovías existentes: ${fmt(D.red_existente.km, 0)} km ` +
+  `(tramos a ≤ ${D.tolerancia_m} m se consideran conectados).`;
+document.getElementById("nota").textContent =
+  `Sin corrección topológica: la conectividad se estima por cercanía (≤ ${D.tolerancia_m} m). ` +
+  `"Km por la red" = distancia recorrida por ciclovías existentes desde el sistema. ` +
+  `Datos generados el ${D.generado}.`;
+
+// ---------- Mapas base (CARTO claro vectorial siempre debajo; los demás son raster encima)
+const CFG = Object.assign({ googleApiKey: "", googleNoOficial: false, mapaBaseInicial: "carto-claro" }, window.CONFIG || {});
+const GKEY = (CFG.googleApiKey || "").trim();
+const ATR_OSM = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const ATR_ESRI = "© Esri y colaboradores";
+const ESRI = s => [`https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/{z}/{y}/{x}`];
+const abc = (u, s = ["a", "b", "c"]) => s.map(x => u.replace("{s}", x));
+const capa = (tiles, atr, max = 19) => ({ tiles, atr, max });
+// Google: API oficial si hay clave; si no, URLs directas (no oficiales) sólo si googleNoOficial = true en config.js
+const gDirecto = lyrs => [0, 1, 2, 3].map(n => `https://mt${n}.google.com/vt/lyrs=${lyrs}&hl=es&x={x}&y={y}&z={z}`);
+const google = (id, nombre, oficial, lyrs, oscuro) => GKEY ? { id, nombre, grupo: "Google", oscuro, google: oficial } :
+  CFG.googleNoOficial ? { id, nombre, grupo: "Google (acceso no oficial)", oscuro, capas: [capa(gDirecto(lyrs), "Mapa © Google", 21)] } : null;
+// Mapbox (Static Tiles API, oficial) sólo si hay mapboxToken en config.js
+const MBTOKEN = (CFG.mapboxToken || "").trim();
+const ATR_MAPBOX = '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> ' + ATR_OSM;
+const mapbox = (id, nombre, estilo, oscuro) => MBTOKEN ? { id, nombre, grupo: "Mapbox", oscuro, capas: [{ ...capa(
+  [`https://api.mapbox.com/styles/v1/mapbox/${estilo}/tiles/512/{z}/{x}/{y}@2x?access_token=${encodeURIComponent(MBTOKEN)}`],
+  ATR_MAPBOX, 22), size: 512 }] } : null;
+const BASES = [
+  { id: "carto-claro", nombre: "CARTO claro", grupo: "Mapas libres (datos OpenStreetMap)", capas: [] },  // vectorial, siempre debajo
+  { id: "osm", nombre: "OpenStreetMap estándar", grupo: "Mapas libres (datos OpenStreetMap)",
+    capas: [capa(["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], ATR_OSM)] },
+  { id: "cyclosm", nombre: "CyclOSM (ciclovías)", grupo: "Mapas libres (datos OpenStreetMap)",
+    capas: [capa(abc("https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"), "CyclOSM · " + ATR_OSM, 20)] },
+  { id: "s2", nombre: "Sentinel-2 sin nubes 2023 (EOX)", grupo: "Satélite", oscuro: true,
+    capas: [capa(["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg"],
+      'Sentinel-2 cloudless 2023 © <a href="https://s2maps.eu">EOX</a> (CC BY-NC-SA 4.0)', 15)] },
+  { id: "esri-satelite", nombre: "Esri satélite", grupo: "Satélite", oscuro: true, capas: [capa(ESRI("World_Imagery"), ATR_ESRI)] },
+  { id: "esri-hibrido", nombre: "Esri satélite + calles", grupo: "Satélite", oscuro: true, capas: [
+    capa(ESRI("World_Imagery"), ATR_ESRI), capa(ESRI("Reference/World_Transportation"), ""),
+    capa(ESRI("Reference/World_Boundaries_and_Places"), "")] },
+  { id: "esri-calles", nombre: "Esri calles", grupo: "Esri (uso gratuito, no libre)", capas: [capa(ESRI("World_Street_Map"), ATR_ESRI)] },
+  { id: "esri-topo", nombre: "Esri topográfico", grupo: "Esri (uso gratuito, no libre)", capas: [capa(ESRI("World_Topo_Map"), ATR_ESRI)] },
+  { id: "esri-gris", nombre: "Esri gris claro", grupo: "Esri (uso gratuito, no libre)",
+    capas: [capa(ESRI("Canvas/World_Light_Gray_Base"), ATR_ESRI, 16)] },
+  { id: "esri-gris-osc", nombre: "Esri gris oscuro", grupo: "Esri (uso gratuito, no libre)", oscuro: true,
+    capas: [capa(ESRI("Canvas/World_Dark_Gray_Base"), ATR_ESRI, 16)] },
+  mapbox("mapbox-calles", "Mapbox calles", "streets-v12"),
+  mapbox("mapbox-claro", "Mapbox claro", "light-v11"),
+  mapbox("mapbox-oscuro", "Mapbox oscuro", "dark-v11", true),
+  mapbox("mapbox-outdoors", "Mapbox outdoors", "outdoors-v12"),
+  mapbox("mapbox-satelite", "Mapbox satélite", "satellite-v9", true),
+  mapbox("mapbox-sat-calles", "Mapbox satélite + calles", "satellite-streets-v12", true),
+  google("google-mapa", "Google mapa", { mapType: "roadmap" }, "m"),
+  google("google-satelite", "Google satélite", { mapType: "satellite" }, "s", true),
+  google("google-hibrido", "Google híbrido", { mapType: "satellite", layerTypes: ["layerRoadmap"] }, "y", true),
+  google("google-terreno", "Google terreno", { mapType: "terrain", layerTypes: ["layerRoadmap"] }, "p"),
+].filter(Boolean);
+const baseInicial = BASES.find(b => b.id === CFG.mapaBaseInicial) || BASES[0];
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  bounds: bbox(D.geo.sistemas), fitBoundsOptions: { padding: 40 },
+  attributionControl: { compact: true },
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+
+// Botón "Mapa base" sobre el mapa, con menú desplegable
+let baseActual = baseInicial;
+class ControlBase {
+  onAdd() {
+    this.c = document.createElement("div");
+    this.c.className = "maplibregl-ctrl maplibregl-ctrl-group ctl-base";
+    const grupos = [...new Set(BASES.map(b => b.grupo))];
+    this.c.innerHTML = `<button type="button" aria-expanded="false" title="Mapa base" aria-label="Mapa base">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round">
+        <path d="M12 3 2 8l10 5 10-5z"/><path d="m2 13 10 5 10-5"/></svg></button>
+      <div class="base-menu" hidden>
+        ${grupos.map(g => `<div class="grupo">${g}</div>` + BASES.filter(b => b.grupo === g).map(b =>
+          `<label><input type="radio" name="base" value="${b.id}"> ${b.nombre}</label>`).join("")).join("")}
+        <div class="hint" id="mapaBaseHint"></div>
+      </div>`;
+    const btn = this.c.querySelector("button"), menu = this.c.querySelector(".base-menu");
+    btn.onclick = () => { menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", !menu.hidden); };
+    this.c.querySelectorAll("input").forEach(r => r.onchange = () => {
+      ponerBase(BASES.find(b => b.id === r.value)); menu.hidden = true; btn.setAttribute("aria-expanded", false);
+    });
+    document.addEventListener("click", e => { if (!this.c.contains(e.target)) menu.hidden = true; });
+    return this.c;
+  }
+  onRemove() { this.c.remove(); }
+}
+map.addControl(new ControlBase(), "top-left");
+
+// ---------- Capas de referencia (data/capas.js) y panel de capas
+const REF = window.CAPAS || {};
+const km2 = x => x == null || x === "" ? null : fmt(x, 2) + " km";
+const unir = (...a) => a.filter(x => x && x !== "s_i" && x !== "S_I" && x !== "?").join(" → ");
+const MORADO_GORE = "#5e3c6e";   // color común de los Ejes GORE (ciruela oscuro, distinto del lila de "Con/En diseño")
+const AZUL_EXISTENTES = "#5598e7", AZUL_EXISTENTES_OSCURO = "#86b6ef";   // red existente (línea fina) en mapas claros / oscuros
+// Cada capa: fuente (id en capas.js), grupo del panel, tipo (line|circle|square), color (fijo o por categoría), popup
+const CAPAS_REF = [
+  { id: "pmc-metro", fuente: "pmc_metro", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Metropolitanos",
+    color: "#9a3a0c", ancho: 3.5,
+    popup: p => [p.nombre, [["Capa", "PMC Metropolitano"], ["Código", p.cod], ["Tramo RS", p.tramo_RS],
+      ["Tramo", unir(p.inicio, p.termino)], ["Estado", p.esttado], ["Largo del tramo", km2(p.km_geom)]]] },
+  { id: "pmc-inter", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Intercomunales",
+    color: "#e2701f", ancho: 2.5, filtro: ["==", ["get", "escala"], "Intercomunal"], f: p => p.escala === "Intercomunal",
+    popup: p => [p.nombre, [["Capa", "PMC Intercomunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
+      ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
+  { id: "pmc-com", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Comunales",
+    color: "#f7b98a", ancho: 2.5, filtro: ["==", ["get", "escala"], "Comunal"], f: p => p.escala === "Comunal",
+    popup: p => [p.nombre, [["Capa", "PMC Comunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
+      ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
+  { id: "eva", fuente: "eva", grupo: "Plan Maestro de Ciclovías", nombre: "Factibilidad EVA", ancho: 3,
+    color: { campo: "factibilidad", items: [["Alta", "#0ca30c"], ["Par vial (Alta)", "#0ca30c", null], ["Media", "#fab219"],
+      ["Par vial (Media)", "#fab219", null], ["Baja", "#d03b3b"], ["Existente", "#2a78d6"], ["Propuesta", "#4a3aa7"]],
+      otro: "#a8a7a0", otroNombre: "Sin información" },
+    popup: p => [`${p.nombre} (${p.id})`, [["Factibilidad", p.factibilidad], ["Ranking", p.rank != null ? "#" + p.rank : null],
+      ["Puntaje", p.score], ["Escala", p.escala], ["Comunas", p.comunas], ["Costo estimado", p.costo_total_MCLP != null ?
+      fmt(p.costo_total_MCLP, 0) + " MM$" : null], ["Pendiente media / máx.", p.pend_media_pct != null ?
+      `${fmt(p.pend_media_pct)} % / ${fmt(p.pend_max_pct)} %` : null], ["Largo", km2(p.km_geom)], ["Comentario", p.explicacion]]] },
+  { id: "proy-dis", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: en diseño",
+    color: "#1baf7a", ancho: 2.5, filtro: ["==", ["get", "ETAPA"], "diseño"], f: p => p.ETAPA === "diseño",
+    popup: p => popProy(p) },
+  { id: "proy-plan", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: planificadas",
+    color: "#1baf7a", ancho: 2, dash: [2, 1.5], filtro: ["==", ["get", "ETAPA"], "planificadas"], f: p => p.ETAPA === "planificadas",
+    popup: p => popProy(p) },
+  { id: "chimba", fuente: "chimba", grupo: "Ejes GORE", nombre: "Ruta La Chimba", color: MORADO_GORE, ancho: 4,
+    popup: p => [p.Eje || "Ruta La Chimba", [["Capa", "Ruta La Chimba (Eje GORE)"], ["Tramo", p.Tramo], ["Estado", p.estado],
+      ["Categoría vial", p.CateVial], ["Sentido de tránsito", p.SentTransi], ["N° pistas", p.NPistas], ["Largo", km2(p.km_geom)]]] },
+  { id: "mapocho", fuente: "mapocho", grupo: "Ejes GORE", nombre: "Mapocho Pedaleable", color: MORADO_GORE, ancho: 4,
+    popup: p => ["Mapocho Pedaleable", [["Capa", "Eje GORE"], ["Largo", km2(p.km_geom)]]] },
+  { id: "alameda-t3", fuente: "alameda_t3", grupo: "Ejes GORE", nombre: "Alameda Tramo 3", color: MORADO_GORE, ancho: 4,
+    popup: p => [p.EJE_VIA || "Alameda Tramo 3", [["Capa", "Eje GORE"], ["Comuna", p.COMUNA], ["Tramo", unir(p.INICIO, p.FIN)],
+      ["Operación", p.CARAC_FUNC], ["Etapa", p.ETAPA_DET], ["Cartera", p.CARTERA], ["Normativa", p.NORMATIVA], ["Largo", km2(p.km_geom)]]] },
+  { id: "ferias", fuente: "ferias", grupo: "Contexto urbano", nombre: "Ferias libres y persas", ancho: 5.5, color: "#d6198a",
+    popup: p => [p.nombre, [["Tipo", p.tipo], ["Comuna", p.comuna], ["Ubicación", p.ubic], ["Días", p.diasTexto],
+      ["Horario", p.horario], ["Puestos", p.puestos != null ? fmt(p.puestos, 0) : null], ["Relación con ciclovía", p.relCiclovia]]] },
+  { id: "pasos", fuente: "pasos", grupo: "Contexto urbano", nombre: "Pasos a desnivel y túneles", ancho: 5.5, color: "#8b5a2b",
+    popup: p => [p.name || "Paso a desnivel", [["Estructura", p.estructura], ["Vía", p["vía"]]]] },
+  { id: "paraderos", fuente: "paraderos", grupo: "Contexto urbano", nombre: "Paraderos de bus", tipo: "square",
+    color: "#1f5fbf", minzoom: 13, nota: "visibles al acercarse",
+    popup: () => ["Paradero de bus", [["Fuente", "GTFS Red Metropolitana de Movilidad"]]] },
+  { id: "siniestros-grupos", fuente: "siniestros", grupo: "Siniestros en bicicleta 2020–2024", nombre: "Siniestros agrupados",
+    tipo: "cluster", capasExtra: ["siniestros-grupos-n", "siniestros-grupos-pt"],
+    nota: "los círculos agrupan siniestros cercanos (el número es la cantidad); clic en un círculo para acercarse. " +
+      "Al acercarse se ven los siniestros individuales según gravedad",
+    color: { campo: "severidad", items: [["fatal", "#67000d", "Fatal"], ["grave", "#cb181d", "Grave"],
+      ["lesion", "#fb6a4a", "Con lesionados"], ["danios", "#fcae91", "Sólo daños"]], otro: "#fcae91" },
+    popup: p => popSiniestro(p) },
+  { id: "siniestros", fuente: "siniestros", grupo: "Siniestros en bicicleta 2020–2024", nombre: "Puntos por tipo de siniestro",
+    tipo: "circle", nota: "tamaño del punto según gravedad",
+    color: { campo: "tipo_grupo", items: [["Colisión lateral", "#2a78d6"], ["Colisión por alcance", "#eb6834"],
+      ["Colisión frontal", "#d03b3b"], ["Colisión perpendicular", "#1baf7a"], ["Volcadura / caída", "#eda100"],
+      ["Atropello", "#4a3aa7"], ["Otro / sin especificar", "#a8a7a0"]], otro: "#a8a7a0" },
+    radio: ["interpolate", ["linear"], ["zoom"], 10, ["match", ["get", "severidad"], "fatal", 4.5, "grave", 3.4, "lesion", 2.6, 2],
+      15, ["match", ["get", "severidad"], "fatal", 8, "grave", 6.5, "lesion", 5, 4]],
+    popup: p => popSiniestro(p) },
+  { id: "siniestros-calor", fuente: "siniestros", grupo: "Siniestros en bicicleta 2020–2024", nombre: "Densidad de siniestros (kernel)",
+    tipo: "heatmap", nota: "ponderada por gravedad: un siniestro fatal pesa 9 veces uno con sólo daños" },
+].filter(c => REF[c.fuente]);
+// capas con popup (no el mapa de calor); en la agrupada, sólo los puntos individuales
+const CAPAS_CLIC = CAPAS_REF.filter(c => c.popup).map(c => c.tipo === "cluster" ? c.capasExtra[1] : c.id);
+const refDeCapa = id => CAPAS_REF.find(c => c.id === id || (c.capasExtra || []).includes(id));
+function popSiniestro(p) {
+  return [`Siniestro ${p.anio}: ${p.tipo_grupo}`, [["Gravedad", { fatal: "Fatal", grave: "Grave", lesion: "Con lesionados",
+    danios: "Sólo daños" }[p.severidad] || p.severidad], ["Tipo (registro original)", p.tipo], ["Comuna", p.comuna],
+    ["Lugar", p.lugar], ["Causa", p.causa], ["Ubicación", p.ubic],
+    ["Fallecidos / graves / menos graves / leves", `${p.fall} / ${p.grav} / ${p.meng} / ${p.leve}`]]];
+}
+// Agrupación (cluster): color y tamaño según cantidad de siniestros del grupo
+const ROJOS_GRUPO = ["#fcbba1", "#fb6a4a", "#de2d26", "#a50f15", "#67000d"], CORTES_GRUPO = [10, 50, 150, 400];
+const circulosGrupo = () => `<svg width="26" height="14"><circle cx="5" cy="9" r="3.5" fill="${ROJOS_GRUPO[1]}"/>
+  <circle cx="12.5" cy="8" r="4.5" fill="${ROJOS_GRUPO[3]}"/><circle cx="20.5" cy="7" r="5.5" fill="${ROJOS_GRUPO[4]}"/></svg>`;
+// Ícono cuadrado (7 px con borde blanco, dibujado al doble de resolución)
+function imagenCuadro(color, lado = 14, borde = 2) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = lado;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, lado, lado);
+  ctx.fillStyle = color; ctx.fillRect(borde, borde, lado - 2 * borde, lado - 2 * borde);
+  return ctx.getImageData(0, 0, lado, lado);
+}
+function popProy(p) {
+  return [p.EJE_VIA || "Ciclovía proyectada", [["Comuna", p.COMUNA], ["Tramo", unir(p.INICIO, p.FIN)], ["Tipo", p.TIPO],
+    ["Etapa", p.Etapa_det], ["Cartera", p.CARTERA], ["Proyecto", p.NOMBRE_PRO], ["Normativa", p.NORMATIVA], ["Largo", km2(p.km_geom)]]];
+}
+const colorExpr = c => typeof c.color === "string" ? c.color :
+  ["match", ["get", c.color.campo], ...c.color.items.flatMap(([v, col]) => [v, col]), c.color.otro];
+const muestra = (color, ancho, dash) => `<svg width="26" height="10"><line x1="2" y1="5" x2="24" y2="5" stroke="${color}"
+  stroke-width="${ancho}" ${dash ? `stroke-dasharray="${dash.map(x => x * ancho).join(" ")}"` : 'stroke-linecap="round"'}/></svg>`;
+const punto = (color, r = 4) => `<svg width="26" height="10"><circle cx="13" cy="5" r="${r}" fill="${color}" stroke="#fff" stroke-width="1"/></svg>`;
+const cuadro = color => `<svg width="26" height="10"><rect x="9.5" y="1.5" width="7" height="7" fill="${color}" stroke="#fff" stroke-width="1"/></svg>`;
+const esPunto = c => ["circle", "square", "heatmap", "cluster"].includes(c.tipo);
+const RAMPA_CALOR = ["#fff3b0", "#fdc35a", "#f58a3c", "#d6452b", "#8e0c1e"];
+const degradado = () => `<svg width="26" height="10"><defs><linearGradient id="gcal">${RAMPA_CALOR.map((c, i) =>
+  `<stop offset="${i / (RAMPA_CALOR.length - 1)}" stop-color="${c}"/>`).join("")}</linearGradient></defs>
+  <rect x="1" y="1.5" width="24" height="7" rx="2" fill="url(#gcal)"/></svg>`;
+function totalCapa(c) {
+  const fs = REF[c.fuente].features.filter(x => !c.f || c.f(x.properties));
+  return esPunto(c) ? fmt(fs.length, 0) : fmt(fs.reduce((s, x) => s + (x.properties.km_geom || 0), 0), 0) + " km";
+}
+function itemCapa(c) {
+  const sw = col => c.tipo === "heatmap" ? degradado() : c.tipo === "circle" || c.tipo === "cluster" ? punto(col) :
+    c.tipo === "square" ? cuadro(col) : muestra(col, c.ancho, c.dash);
+  const principal = !c.color || typeof c.color === "string" ? c.color : c.color.items[0][1];
+  if (c.tipo === "cluster") {   // muestra principal: círculos agrupados de distinto tamaño
+    const sub = `<div class="subley">` + c.color.items.map(([v, col, et]) => `<span>${punto(col)} ${et || v}</span>`).join("") + `</div>`;
+    return `<label><input type="checkbox" data-capa="${c.id}">${circulosGrupo()} ${c.nombre}<small>${totalCapa(c)}</small></label>
+${sub}${c.nota ? `<div class="notaCapa">${c.nota}</div>` : ""}`;
+  }
+  const sub = !c.color || typeof c.color === "string" ? "" : `<div class="subley">` + c.color.items.filter(i => i[2] !== null)
+    .map(([v, col, et]) => `<span>${sw(col)} ${et || v}</span>`).join("") +
+    (c.color.otroNombre ? `<span>${sw(c.color.otro)} ${c.color.otroNombre}</span>` : "") + `</div>`;
+  return `<label><input type="checkbox" data-capa="${c.id}">${sw(principal)} ${c.nombre}<small>${totalCapa(c)}</small></label>
+${sub}${c.nota ? `<div class="notaCapa">${c.nota}</div>` : ""}`;
+}
+// Grupos desplegables: los de esta lista parten abiertos, el resto plegado
+const GRUPOS_ABIERTOS = ["Análisis de red", "Plan Maestro de Ciclovías"];
+const grupoHTML = (g, cuerpo) => `<details class="grp" ${GRUPOS_ABIERTOS.includes(g) ? "open" : ""}>
+  <summary>${g}<span class="activas"></span></summary>${cuerpo}</details>`;
+document.getElementById("capas").innerHTML = grupoHTML("Análisis de red", `
+  <label><input type="checkbox" id="cAct" checked>${muestra("#2a78d6", 3)} Existentes activadas por el sistema</label>
+  <div class="subley on"><span>Azul más oscuro = más cerca del sistema (ver deslizador del panel izquierdo)</span></div>
+  <label><input type="checkbox" id="cBase">${muestra(AZUL_EXISTENTES, 1.2)} Ciclovías existentes
+    <small>${fmt(D.red_existente.km, 0)} km</small></label>
+  <label><input type="checkbox" id="cOtros">${muestra("#b5b4ae", 2.5)} Otros sistemas (tenue)</label>
+  <label><input type="checkbox" id="cBrechas">${muestra("#0b0b0b", 2, [1, 1.5])} Brechas de conexión</label>`) +
+  [...new Set(CAPAS_REF.map(c => c.grupo))].map(g => grupoHTML(g,
+    CAPAS_REF.filter(c => c.grupo === g).map(itemCapa).join(""))).join("");
+// cuántas capas hay encendidas en cada grupo (se ve aunque el grupo esté plegado)
+function contarActivas() {
+  document.querySelectorAll("#capas details.grp").forEach(d => {
+    const n = d.querySelectorAll("input[type=checkbox]:checked").length;
+    d.querySelector(".activas").textContent = n ? `${n} activa${n > 1 ? "s" : ""}` : "";
+  });
+}
+document.querySelectorAll("#capas [data-capa]").forEach(i => i.onchange = () => {
+  const c = refDeCapa(i.dataset.capa);
+  [i.dataset.capa, ...(c?.capasExtra || [])].forEach(id => vis(id, i.checked));
+  const sub = i.closest("label").nextElementSibling;   // la leyenda por categoría se muestra sólo con la capa encendida
+  if (sub && sub.classList.contains("subley")) sub.classList.toggle("on", i.checked);
+  contarActivas();
+});
+document.getElementById("cAct").onchange = e => { vis("ex-act", e.target.checked); vis("ex-act-casing", e.target.checked); };
+document.querySelectorAll("#cBase, #cAct, #cOtros, #cBrechas").forEach(i => i.addEventListener("change", contarActivas));
+contarActivas();
+
+// Mostrar/ocultar el panel derecho (botón del panel y botón sobre el mapa)
+class ControlPanelDer {
+  onAdd() {
+    this.c = document.createElement("div");
+    this.c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    this.c.innerHTML = `<button class="ctl-der" title="Mostrar u ocultar capas y leyenda" aria-label="Capas y leyenda">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round">
+      <path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1" fill="#333"/><circle cx="4" cy="12" r="1" fill="#333"/>
+      <circle cx="4" cy="18" r="1" fill="#333"/></svg></button>`;
+    this.c.querySelector("button").onclick = () => panelDer(document.getElementById("panelDer").hidden);
+    return this.c;
+  }
+  onRemove() { this.c.remove(); }
+}
+map.addControl(new ControlPanelDer(), "top-right");
+function panelDer(mostrar) {
+  document.getElementById("panelDer").hidden = !mostrar;
+  document.querySelector(".ctl-der").setAttribute("aria-pressed", mostrar);
+  map.resize();
+}
+document.getElementById("ocultarDer").onclick = () => panelDer(false);
+panelDer(window.innerWidth >= 720);   // en pantallas chicas parte oculto
+function marcarBase(base) {
+  baseActual = base;
+  document.querySelectorAll(".base-menu input").forEach(r => r.checked = r.value === base.id);
+}
+marcarBase(baseInicial);
+
+const sesionesGoogle = {};
+let avisoBase = 0;
+map.on("error", e => {
+  if (!String(e.sourceId || "").startsWith("base-") || Date.now() - avisoBase < 3000) return;
+  avisoBase = Date.now();
+  document.getElementById("mapaBaseHint").textContent =
+    `No cargan las imágenes de "${baseActual.nombre}" (${e.error?.message || "error de red"}).`;
+  document.querySelector(".base-menu").hidden = false;
+});
+
+async function ponerBase(base) {
+  const hint = document.getElementById("mapaBaseHint");
+  hint.textContent = "";
+  let capas = base.capas;
+  if (base.google) {
+    try {
+      capas = [{ tiles: [await tilesGoogle(base)], atr: "Mapa © Google", size: 256, max: 22 }];
+    } catch (err) {
+      await ponerBase(BASES[0]);
+      hint.textContent = "No se pudo cargar el mapa de Google: " + err.message;
+      document.querySelector(".base-menu").hidden = false;
+      return;
+    }
+  }
+  marcarBase(base);
+  // quitar mapa base anterior
+  for (const l of map.getStyle().layers.filter(l => l.id.startsWith("base-"))) map.removeLayer(l.id);
+  for (const s of Object.keys(map.getStyle().sources).filter(s => s.startsWith("base-"))) map.removeSource(s);
+  const debajoDe = map.getLayer("ex-base") ? "ex-base" : undefined;
+  capas.forEach((c, i) => {
+    map.addSource(`base-${i}`, { type: "raster", tiles: c.tiles, tileSize: c.size || 256, maxzoom: c.max || 20,
+      attribution: c.atr });
+    map.addLayer({ id: `base-${i}`, type: "raster", source: `base-${i}` }, debajoDe);
+  });
+  // red de fondo más clara sobre mapas oscuros/satélite
+  if (map.getLayer("ex-base")) {
+    map.setPaintProperty("ex-base", "line-color", base.oscuro ? AZUL_EXISTENTES_OSCURO : AZUL_EXISTENTES);
+    map.setPaintProperty("sis-otros", "line-color", base.oscuro ? "#ffffff" : "#6e6d68");
+    map.setPaintProperty("sis-otros", "line-opacity", base.oscuro ? 0.55 : 0.35);
+    map.setPaintProperty("br", "line-color", base.oscuro ? "#fab219" : "#0b0b0b");
+  }
+}
+
+async function tilesGoogle(base) {
+  if (!sesionesGoogle[base.id] || sesionesGoogle[base.id].expira < Date.now() / 1000 + 300) {
+    const r = await fetch(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(GKEY)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: "es-419", region: "CL", ...base.google }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error?.message || r.status);
+    sesionesGoogle[base.id] = { token: j.session, expira: +j.expiry };
+  }
+  return `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${sesionesGoogle[base.id].token}&key=${encodeURIComponent(GKEY)}`;
+}
+
+const colorTipo = ["match", ["get", "tipo"], ...D.tipos.flatMap(t => [t.tipo, t.color]), "#898781"];
+const TRAZO = Object.fromEntries(["continuo", "guiones", "puntos"].map(k =>
+  [k, k === "continuo" ? ["!", ["in", ["get", "trazo"], ["literal", ["guiones", "puntos"]]]] : ["==", ["get", "trazo"], k]]));
+
+map.on("load", () => {
+  map.addSource("ex", { type: "geojson", data: D.geo.existentes });
+  map.addSource("sis", { type: "geojson", data: D.geo.sistemas });
+  map.addSource("br", { type: "geojson", data: D.geo.brechas });
+
+  map.addLayer({ id: "ex-base", type: "line", source: "ex",
+    layout: { visibility: document.getElementById("cBase").checked ? "visible" : "none" },
+    paint: { "line-color": AZUL_EXISTENTES, "line-width": 1.2, "line-opacity": 0.85 } });
+  map.addLayer({ id: "sis-otros", type: "line", source: "sis",
+    paint: { "line-color": "#6e6d68", "line-width": 2.5, "line-opacity": 0.35 } });
+  for (const c of CAPAS_REF) {   // líneas de referencia: debajo de la red activada y los sistemas
+    if (!map.getSource(`ref-${c.fuente}`)) map.addSource(`ref-${c.fuente}`, { type: "geojson", data: REF[c.fuente] });
+    if (esPunto(c)) continue;
+    map.addLayer({ id: c.id, type: "line", source: `ref-${c.fuente}`, ...(c.filtro ? { filter: c.filtro } : {}),
+      layout: { visibility: "none", "line-join": "round", ...(c.dash ? {} : { "line-cap": "round" }) },
+      paint: { "line-color": colorExpr(c), "line-width": c.ancho, "line-opacity": 0.9, ...(c.dash ? { "line-dasharray": c.dash } : {}) } });
+  }
+  map.addLayer({ id: "ex-act-casing", type: "line", source: "ex",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#fff", "line-width": 5.5 } });
+  map.addLayer({ id: "ex-act", type: "line", source: "ex",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-width": 3 } });
+  map.addLayer({ id: "br", type: "line", source: "br",
+    layout: { visibility: "none", "line-cap": "round" },
+    paint: { "line-color": "#0b0b0b", "line-width": ["case", ["get", "une_fragmentos"], 2.5, 1.5],
+      "line-dasharray": [1, 1.5] } });
+  map.addLayer({ id: "sis-casing", type: "line", source: "sis",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#fff", "line-width": 9 } });
+  // sistemas: una capa por tipo de trazo (continuo / guiones / puntos), color según categoría
+  map.addLayer({ id: "sis-sel", type: "line", source: "sis",
+    layout: { "line-cap": "round", "line-join": "round" },
+    filter: TRAZO.continuo,
+    paint: { "line-color": colorTipo, "line-width": 5.5 } });
+  map.addLayer({ id: "sis-alt", type: "line", source: "sis",
+    layout: { "line-join": "round" },
+    filter: TRAZO.guiones,
+    paint: { "line-color": colorTipo, "line-width": 5.5, "line-dasharray": [1.6, 1] } });
+  map.addLayer({ id: "sis-pto", type: "line", source: "sis",
+    layout: { "line-cap": "round", "line-join": "round" },
+    filter: TRAZO.puntos,
+    paint: { "line-color": colorTipo, "line-width": 5.5, "line-dasharray": [0, 1.6] } });
+  for (const c of CAPAS_REF.filter(esPunto)) {   // puntos de referencia: encima de todo
+    if (c.tipo === "cluster") {
+      const src = `ref-${c.fuente}-grupos`;
+      map.addSource(src, { type: "geojson", data: REF[c.fuente], cluster: true, clusterRadius: 45, clusterMaxZoom: 15 });
+      const n = ["get", "point_count"];
+      map.addLayer({ id: c.id, type: "circle", source: src, filter: ["has", "point_count"], layout: { visibility: "none" },
+        paint: {
+          "circle-color": ["step", n, ROJOS_GRUPO[0], ...CORTES_GRUPO.flatMap((k, i) => [k, ROJOS_GRUPO[i + 1]])],
+          "circle-radius": ["step", n, 11, 10, 15, 50, 20, 150, 26, 400, 33],
+          "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.9 } });
+      map.addLayer({ id: c.capasExtra[0], type: "symbol", source: src, filter: ["has", "point_count"],
+        layout: { visibility: "none", "text-field": ["get", "point_count_abbreviated"], "text-size": 11.5,
+          "text-font": ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"], "text-allow-overlap": true },
+        paint: { "text-color": ["step", n, "#67000d", 10, "#ffffff"] } });
+      map.addLayer({ id: c.capasExtra[1], type: "circle", source: src, filter: ["!", ["has", "point_count"]],
+        layout: { visibility: "none" },
+        paint: { "circle-color": colorExpr(c),
+          "circle-radius": ["match", ["get", "severidad"], "fatal", 7, "grave", 5.5, "lesion", 4.5, 3.5],
+          "circle-stroke-color": "#fff", "circle-stroke-width": 1, "circle-opacity": 0.95 } });
+      map.on("mouseenter", c.id, () => map.getCanvas().style.cursor = "zoom-in");
+      map.on("mouseleave", c.id, () => map.getCanvas().style.cursor = "");
+      continue;
+    }
+    if (c.tipo === "heatmap") {   // densidad kernel: debajo de la red activada y los sistemas
+      map.addLayer({ id: c.id, type: "heatmap", source: `ref-${c.fuente}`, layout: { visibility: "none" },
+        paint: {
+          "heatmap-weight": ["/", ["to-number", ["get", "peso"], 1], 9],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 1.2, 15, 3],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 12, 18, 15, 38],
+          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(255,243,176,0)",
+            0.12, RAMPA_CALOR[0], 0.3, RAMPA_CALOR[1], 0.5, RAMPA_CALOR[2], 0.72, RAMPA_CALOR[3], 1, RAMPA_CALOR[4]],
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 12, 0.85, 16, 0.55],
+        } }, "ex-act-casing");
+      continue;
+    }
+    if (c.tipo === "square") {
+      const img = `cuadro-${c.id}`;
+      if (!map.hasImage(img)) map.addImage(img, imagenCuadro(c.color), { pixelRatio: 2 });
+      map.addLayer({ id: c.id, type: "symbol", source: `ref-${c.fuente}`, minzoom: c.minzoom || 0,
+        layout: { visibility: "none", "icon-image": img, "icon-allow-overlap": true, "icon-ignore-placement": true } });
+      continue;
+    }
+    map.addLayer({ id: c.id, type: "circle", source: `ref-${c.fuente}`, minzoom: c.minzoom || 0,
+      layout: { visibility: "none" },
+      paint: { "circle-color": colorExpr(c), "circle-radius": c.radio || 3, "circle-stroke-color": "#fff",
+        "circle-stroke-width": 0.8, "circle-opacity": 0.9 } });
+  }
+
+  for (const id of ["sis-sel", "sis-alt", "sis-pto", "ex-act", "br", "sis-otros", ...CAPAS_CLIC]) {
+    map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
+  }
+  map.on("click", e => {
+    if (modoSV) return abrirSV(e.lngLat, rumboCercano(e.point));
+    // clic en un círculo agrupado: acercar hasta que se separe
+    const capasGrupo = CAPAS_REF.filter(c => c.tipo === "cluster" && map.getLayoutProperty(c.id, "visibility") === "visible");
+    const g = capasGrupo.length && map.queryRenderedFeatures(e.point, { layers: capasGrupo.map(c => c.id) })[0];
+    if (g) {
+      map.getSource(g.source).getClusterExpansionZoom(g.properties.cluster_id)
+        .then(z => map.easeTo({ center: g.geometry.coordinates, zoom: z + 0.3 }));
+      return;
+    }
+    popup(e);
+  });
+  ponerBase(baseInicial);
+  render(true);
+});
+
+// ---------- Controles
+const cont = document.getElementById("sistemas");
+D.sistemas.forEach(s => {
+  const b = document.createElement("button");
+  b.textContent = s.nombre; b.dataset.k = s.key;
+  if (s.key === "all") {
+    b.className = "todos";
+    // "Todos": marca todos; si ya están todos, vuelve a dejar sólo el primero
+    b.onclick = () => { estado.sel = new Set(estado.sel.size === ORDEN.length ? [ORDEN[0]] : ORDEN); render(true); };
+  } else {
+    b.onclick = () => {
+      if (estado.sel.has(s.key)) estado.sel.delete(s.key);
+      else estado.sel.add(s.key);
+      render(estado.sel.size > 0);
+    };
+  }
+  cont.appendChild(b);
+});
+{ // "Ninguno": oculta todos los sistemas y la red activada
+  const b = document.createElement("button");
+  b.textContent = "Ninguno"; b.dataset.k = "none"; b.className = "todos";
+  b.onclick = () => { estado.sel = new Set(); render(false); };
+  cont.appendChild(b);
+}
+segmento("modo", "m", m => {
+  estado.modo = m; const c = MODOS[m]; const r = document.getElementById("umbral");
+  Object.assign(r, { min: c.min, max: c.max, step: c.step, value: c.val }); estado.umbral = c.val; render(false);
+});
+document.getElementById("umbral").oninput = e => { estado.umbral = +e.target.value; render(false); };
+document.getElementById("cBase").onchange = e => vis("ex-base", e.target.checked);
+document.getElementById("cOtros").onchange = () => render(false);
+document.getElementById("cBrechas").onchange = e => vis("br", e.target.checked);
+document.getElementById("toggle").onclick = () => {
+  const p = document.getElementById("panel"); p.classList.toggle("min");
+  document.getElementById("toggle").textContent = p.classList.contains("min") ? "Mostrar panel" : "Ocultar panel";
+  setTimeout(() => map.resize(), 50);
+};
+
+let timer = null;
+document.getElementById("play").onclick = () => {
+  const r = document.getElementById("umbral"), btn = document.getElementById("play");
+  if (timer) { clearInterval(timer); timer = null; btn.textContent = "▶"; return; }
+  btn.textContent = "❚❚"; r.value = r.min; estado.umbral = +r.min; render(false);
+  timer = setInterval(() => {
+    const v = +r.value + +r.step;
+    if (v > +r.max) { clearInterval(timer); timer = null; btn.textContent = "▶"; return; }
+    r.value = v; estado.umbral = v; render(false);
+  }, 450);
+};
+
+function segmento(id, attr, fn) {
+  document.querySelectorAll(`#${id} button`).forEach(b => b.onclick = () => {
+    document.querySelectorAll(`#${id} button`).forEach(x => x.setAttribute("aria-pressed", x === b));
+    fn(b.dataset[attr]);
+  });
+}
+function vis(id, on) { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none"); }
+
+// ---------- Render
+function render(encuadrar) {
+  const { modo, umbral } = estado;
+  const todos = estado.sel.size === ORDEN.length, varios = estado.sel.size > 1;
+  const key = claveCombo();
+  document.querySelectorAll("#sistemas button").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.k === "all" ? todos : b.dataset.k === "none" ? estado.sel.size === 0 :
+      estado.sel.has(b.dataset.k)));
+  document.getElementById("umbralTxt").textContent =
+    modo === "d" ? (umbral === 0 ? "sólo contacto directo" : `hasta ${fmt(umbral)} km`) :
+                   (umbral === 1 ? "sólo tributarias directas" : `hasta ${umbral} conexiones`);
+  document.getElementById("modoAyuda").textContent = modo === "d" ?
+    "Muestra las ciclovías existentes a las que se llega desde el sistema recorriendo como máximo esa distancia por la red existente." :
+    "1 = ciclovías que tocan el sistema (tributarias directas); 2 = las que tocan a esas; 3 = las siguientes, y así sucesivamente. " +
+    "Cuenta tramos de la capa, no distancia: una calle dividida en varios tramos suma varias conexiones.";
+
+  // tramos activados: nivel >= 1 (los de nivel 0 son parte del sistema) y dentro del umbral
+  const h = minExpr("h"), val = minExpr(modo);
+  const filtroAct = ["all", [">=", h, 1], ["<", h, 9999], ["<=", val, umbral]];
+  const colorD = ["step", val, RAMP[0], 1, RAMP[1], 2, RAMP[2], 3, RAMP[3], 5, RAMP[4]];
+  const colorH = ["step", val, RAMP[0], 2, RAMP[1], 3, RAMP[2], 4, RAMP[3], 6, RAMP[4]];
+
+  if (map.getLayer("ex-act")) {
+    map.setFilter("ex-act", filtroAct); map.setFilter("ex-act-casing", filtroAct);
+    map.setPaintProperty("ex-act", "line-color", modo === "d" ? colorD : colorH);
+    const filtroSis = ["in", ["get", "skey"], ["literal", elegidos()]];
+    map.setFilter("sis-sel", ["all", filtroSis, TRAZO.continuo]);
+    map.setFilter("sis-alt", ["all", filtroSis, TRAZO.guiones]);
+    map.setFilter("sis-pto", ["all", filtroSis, TRAZO.puntos]);
+    map.setFilter("sis-casing", filtroSis);
+    map.setFilter("sis-otros", ["!", filtroSis]);
+    vis("sis-otros", document.getElementById("cOtros").checked && !todos);
+    if (encuadrar && estado.sel.size) {
+      const fs = D.geo.sistemas.features.filter(f => estado.sel.has(f.properties.skey));
+      map.fitBounds(bbox({ features: fs }), { padding: 60, duration: 700 });
+    }
+  }
+
+  // rampa (leyenda de activación)
+  const lbl = modo === "d" ? ["≤1 km", "1–2", "2–3", "3–5", ">5 km"] : ["1 conexión", "2", "3", "4–5", "6+"];
+  document.getElementById("ramp").innerHTML = RAMP.map((r, i) => `<div style="background:${r}" title="${lbl[i]}"></div>`).join("");
+  document.querySelector(".rampLbl").innerHTML = `<span>${lbl[0]}</span><span>${lbl[2]}</span><span>${lbl[4]}</span>`;
+
+  // indicadores
+  if (!estado.sel.size) {
+    document.getElementById("kpis").innerHTML = `<div class="kpi wide"><span>Ningún sistema seleccionado. Elige uno o más
+      sistemas para ver la red que activan y sus indicadores.</span></div>`;
+    return;
+  }
+  const st = D.stats[key];
+  let kmAct = 0, nAct = 0;
+  for (const f of D.geo.existentes.features) {
+    const p = f.properties, hh = minProp(p, "h"), vv = minProp(p, modo);
+    if (hh != null && hh >= 1 && vv != null && vv <= umbral) { kmAct += p.km; nAct++; }
+  }
+  const ganancia = st.km_red_conectada - st.km_mayor_previa;
+  const kmIntegrados = Math.max(0, ganancia - st.km_nuevos);   // existentes hoy desconectadas que se suman a la red continua
+  document.getElementById("kpis").innerHTML = `
+    <div class="kpi"><b>${fmt(st.km_sistema)} km</b><span>Sistema (${fmt(st.km_nuevos)} km nuevos · ${fmt(st.km_existentes_sistema)} km existentes)</span></div>
+    <div class="kpi"><b>${fmt(st.km_nivel1)} km</b><span>Tributarias directas (${st.tramos_nivel1} tramos a ≤ ${D.tolerancia_m} m)</span></div>
+    <div class="kpi"><b>${fmt(kmAct)} km</b><span>Red activada con el umbral actual (${nAct} tramos)</span></div>
+    <div class="kpi"><b>${fmt(kmIntegrados)} km</b><span>Ciclovías existentes hoy desconectadas que se suman a la red continua</span></div>
+    <div class="kpi wide"><b>${fmt(st.km_red_conectada, 0)} km <small style="font-size:12px;color:var(--ink-2);font-weight:400">
+      (hoy ${fmt(st.km_mayor_previa, 0)} km · +${fmt(ganancia, 0)} km)</small></b>
+      <span>Red continua al ejecutar ${varios ? "los sistemas elegidos" : "el sistema"}, comparada con la red continua existente
+      más larga que ${varios ? "tocan" : "toca"} hoy${st.piezas_sistema > 1 ? ` · ⚠ ${varios ? "los sistemas elegidos forman" :
+      "el sistema queda en"} ${st.piezas_sistema} redes separadas entre sí` : ""}</span></div>`;
+}
+
+// ---------- Leyenda de categorías
+const TRAZO_SVG = { continuo: 'stroke-linecap="round"', guiones: 'stroke-dasharray="7 4"',
+  puntos: 'stroke-linecap="round" stroke-dasharray="0 8"' };
+// leyenda con glosario: cada categoría con su símbolo y, debajo, su definición
+document.getElementById("leyenda").innerHTML = D.tipos.map(t => `
+  <div class="ley"><svg width="34" height="10"><line x1="3" y1="5" x2="31" y2="5" stroke="${t.color}" stroke-width="5"
+    ${TRAZO_SVG[t.trazo] || TRAZO_SVG.continuo}/></svg><div><b>${t.etiqueta}</b>
+    ${t.definicion ? `<span class="def">${t.definicion}</span>` : ""}</div></div>`).join("");
+
+// ---------- Popups
+function popup(e) {
+  const capas = ["sis-sel", "sis-alt", "sis-pto", "br", "ex-act", "sis-otros", ...CAPAS_CLIC, "ex-base"]
+    .filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
+  const caja = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
+  const f = map.queryRenderedFeatures(caja, { layers: capas })[0];
+  if (!f) return;
+  const p = f.properties;
+  let html;
+  const cref = refDeCapa(f.layer.id);
+  if (cref) {
+    const [titulo, filas] = cref.popup(p);
+    html = `<b>${tabla.esc(titulo)}</b>${tabla(filas)}`;
+  } else if (f.layer.id.startsWith("sis")) {
+    const cat = tipoEstilo[p.tipo]?.etiqueta || p.tipo;
+    html = `<b>${p.nombre && p.nombre !== "null" ? p.nombre : cat}</b>${tabla([["Sistema", p.sistema], ["Categoría", cat],
+      ["Definición", tipoEstilo[p.tipo]?.definicion], ["Largo", fmt(p.km, 2) + " km"]])}`;
+  } else if (f.layer.id === "br") {
+    html = `<b>Brecha de ${p.largo_m} m</b>${tabla([["Desde", p.desde], ["Hacia", p.hacia],
+      ["Conecta ciclovías hoy separadas", p.une_fragmentos ? "Sí" : "No (ya están conectadas por otro camino)"]])}`;
+  } else {
+    const h = minProp(p, "h"), d = minProp(p, "d");
+    html = `<b>${p.EJE_VIA || "Ciclovía existente"}</b>${tabla([
+      ["Comuna", p.COMUNA], ["Tramo", [p.INICIO, p.FIN].filter(Boolean).join(" → ")], ["Tipo", p.TIPO],
+      ["Operación", p.CARAC_FUNC], ["Emplazamiento", p.EMPLAZA_TE], ["Cartera", p.CARTERA], ["Largo", fmt(p.km, 2) + " km"],
+      ["Activación", h == null || h === "null" ? "no conectada al sistema" : h == 0 ? "parte del sistema" :
+        `${h} ${h == 1 ? "conexión (tributaria directa)" : "conexiones"} · ${fmt(d, 2)} km por la red`]])}`;
+  }
+  const rumbo = rumboCercano(e.point);
+  const pop = new maplibregl.Popup({ maxWidth: "320px" }).setLngLat(e.lngLat)
+    .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a></div>`).addTo(map);
+  pop.getElement().querySelector(".svLink").onclick = ev => { ev.preventDefault(); pop.remove(); abrirSV(e.lngLat, rumbo); };
+}
+
+// ---------- Street View
+let modoSV = false, svMarker = null;
+class ControlSV {
+  onAdd() {
+    this.c = document.createElement("div");
+    this.c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    this.c.innerHTML = `<button class="ctl-sv" title="Street View: activa y haz clic en el mapa" aria-label="Street View"
+      aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="#52514e"><circle cx="12" cy="4" r="2.6"/>
+      <path d="M8.5 8.5h7l-1 7h-1.6l-.6 6h-2.6l-.6-6H9.5z"/></svg></button>`;
+    this.c.querySelector("button").onclick = () => setModoSV(!modoSV);
+    return this.c;
+  }
+  onRemove() { this.c.remove(); }
+}
+map.addControl(new ControlSV(), "top-right");
+
+function setModoSV(on) {
+  modoSV = on;
+  document.querySelector(".ctl-sv").setAttribute("aria-pressed", on);
+  document.getElementById("map").classList.toggle("sv-modo", on);
+}
+
+function abrirSV(lngLat, rumbo) {
+  const lat = lngLat.lat.toFixed(6), lng = lngLat.lng.toFixed(6);
+  const h = rumbo == null ? 0 : Math.round(rumbo);
+  const urlGM = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}` + (rumbo == null ? "" : `&heading=${h}`);
+  if (!GKEY) { window.open(urlGM, "_blank", "noopener"); return; }
+
+  document.getElementById("svFrame").src = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(GKEY)}` +
+    `&location=${lat},${lng}&heading=${h}&pitch=0&fov=90&language=es`;
+  document.getElementById("svLink").href = urlGM;
+  document.getElementById("svTitulo").textContent = `Street View · ${lat}, ${lng}`;
+  const sv = document.getElementById("sv");
+  if (sv.hidden) { sv.hidden = false; map.resize(); }
+
+  // marcador con la dirección de la vista
+  if (!svMarker) {
+    const el = document.createElement("div");
+    el.className = "sv-marker";
+    el.innerHTML = `<svg viewBox="0 0 28 28" width="28" height="28"><path d="M14 1 L20 12 L8 12 Z" fill="#fab219" stroke="#0b0b0b" stroke-width="1"/>
+      <circle cx="14" cy="14" r="5.5" fill="#fab219" stroke="#0b0b0b" stroke-width="1.5"/></svg>`;
+    svMarker = new maplibregl.Marker({ element: el, rotationAlignment: "map" });
+  }
+  svMarker.setLngLat(lngLat).setRotation(h).addTo(map);
+  map.easeTo({ center: lngLat, duration: 400 });
+}
+document.getElementById("svCerrar").onclick = () => {
+  document.getElementById("sv").hidden = true;
+  document.getElementById("svFrame").src = "about:blank";
+  if (svMarker) svMarker.remove();
+  map.resize();
+};
+
+// Rumbo (grados desde el norte) del tramo de ciclovía más cercano al punto clicado
+function rumboCercano(pt) {
+  const capas = ["sis-sel", "sis-alt", "sis-pto", "ex-act", "sis-otros", ...CAPAS_CLIC, "ex-base"]
+    .filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
+  const fs = map.queryRenderedFeatures([[pt.x - 12, pt.y - 12], [pt.x + 12, pt.y + 12]], { layers: capas });
+  let mejor = null;
+  for (const f of fs) {
+    const lineas = f.geometry.type === "LineString" ? [f.geometry.coordinates] :
+      f.geometry.type === "MultiLineString" ? f.geometry.coordinates : [];
+    for (const l of lineas) for (let i = 0; i < l.length - 1; i++) {
+      const a = map.project(l[i]), b = map.project(l[i + 1]);
+      const d = distSeg(pt, a, b);
+      if (!mejor || d < mejor.d) mejor = { d, a: l[i], b: l[i + 1] };
+    }
+  }
+  if (!mejor) return null;
+  const [lon1, lat1] = mejor.a.map(x => x * Math.PI / 180), [lon2, lat2] = mejor.b.map(x => x * Math.PI / 180);
+  const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function distSeg(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+  const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+function tabla(filas) {
+  return "<table>" + filas.filter(r => r[1] != null && r[1] !== "" && r[1] !== "s_i" && r[1] !== "null")
+    .map(r => `<tr><td>${r[0]}</td><td>${tabla.esc(r[1])}</td></tr>`).join("") + "</table>";
+}
+tabla.esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+render(false);
+
+function bbox(fc) {
+  let b = [Infinity, Infinity, -Infinity, -Infinity];
+  const walk = c => typeof c[0] === "number" ? (b = [Math.min(b[0], c[0]), Math.min(b[1], c[1]), Math.max(b[2], c[0]), Math.max(b[3], c[1])]) : c.forEach(walk);
+  fc.features.forEach(f => f.geometry && walk(f.geometry.coordinates));
+  return [[b[0], b[1]], [b[2], b[3]]];
+}
+</script>
+</body>
+</html>
