@@ -797,6 +797,11 @@ function render(encuadrar) {
     return;
   }
   const st = D.stats[key];
+  let kmAct = 0, nAct = 0;
+  for (const f of D.geo.existentes.features) {
+    const p = f.properties, hh = minProp(p, "h"), vv = minProp(p, modo);
+    if (hh != null && hh >= 1 && vv != null && vv <= umbral) { kmAct += p.km; nAct++; }
+  }
   // km del sistema por tipo de ciclovía (en el orden de la leyenda)
   const porTipo = {};
   for (const f of D.geo.sistemas.features)
@@ -811,8 +816,9 @@ function render(encuadrar) {
   document.getElementById("kpis").innerHTML = `
     <div class="kpi"><b>${fmt(st.km_sistema)} km</b><span>Sistema (${fmt(st.km_nuevos)} km nuevos · ${fmt(st.km_existentes_sistema)} km existentes)</span></div>
     <div class="kpi"><b>${fmt(st.km_nivel1)} km</b><span>Tributarias directas (${st.tramos_nivel1} tramos a ≤ ${D.tolerancia_m} m)</span></div>
-    <div class="kpi wide"><b>${fmt(st.km_sistema + st.km_nivel1)} km</b><span>Red que forman ${sis} junto con sus
-      ciclovías tributarias directas</span></div>
+    <div class="kpi"><b>${fmt(st.km_sistema + st.km_nivel1)} km</b><span>${varios ? "Sistemas" : "Sistema"} + tributarias
+      directas</span></div>
+    <div class="kpi"><b>${fmt(kmAct)} km</b><span>Red activada con el umbral actual (${nAct} tramos)</span></div>
     <div class="kpi wide"><span>Km de ${sis} por tipo de ciclovía</span>
       <div class="barraTipos">${tipos.map(t => `<div style="flex:${porTipo[t.tipo]};background:${relleno(t)}"
         title="${t.etiqueta}: ${fmt(porTipo[t.tipo])} km"></div>`).join("")}</div>
