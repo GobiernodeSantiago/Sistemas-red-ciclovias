@@ -429,7 +429,7 @@ const CAPAS_REF = [
     color: "#1f5fbf", minzoom: 13, nota: "visibles al acercarse",
     popup: () => ["Paradero de bus", [["Fuente", "GTFS Red Metropolitana de Movilidad"]]] },
   { id: "comunas", fuente: "comunas", grupo: "Contexto urbano", nombre: "Límites comunales", color: "#8f8e88", ancho: 1.2,
-    opacidad: 0.7, debajo: "ex-base", total: n => `${n} comunas`,   // debajo de todas las capas de ciclovías
+    opacidad: 0.7, debajo: "ex-base", total: n => `${n} comunas`, capasExtra: ["comunas-et"],   // + etiquetas con el nombre   // debajo de todas las capas de ciclovías
     popup: p => [p.COMUNA, [["Provincia", p.PROVINCIA], ["Código comunal", p.CUT]]] },
   { id: "siniestros-grupos", fuente: "siniestros", grupo: "Siniestros en bicicleta 2020–2024", nombre: "Siniestros agrupados",
     tipo: "cluster", capasExtra: ["siniestros-grupos-n", "siniestros-grupos-pt"],
@@ -709,6 +709,19 @@ map.on("load", () => {
         "circle-stroke-width": 0.8, "circle-opacity": 0.9 } });
   }
 
+  // etiquetas de comunas: un punto por comuna (centro interior del polígono), encima de todo; se encienden con la capa
+  if (map.getLayer("comunas")) {
+    map.addSource("comunas-et", { type: "geojson", data: { type: "FeatureCollection",
+      features: REF.comunas.features.map(f => ({ type: "Feature", properties: { nombre: nombreComuna(f.properties.COMUNA) },
+        geometry: { type: "Point", coordinates: centroInterior(f.geometry.coordinates) } })) } });
+    map.addLayer({ id: "comunas-et", type: "symbol", source: "comunas-et",
+      layout: { visibility: map.getLayoutProperty("comunas", "visibility") || "visible", "text-field": ["get", "nombre"],
+        "text-font": ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 13, 13], "text-max-width": 7,
+        "text-letter-spacing": 0.02, "text-padding": 4 },
+      paint: { "text-color": "#52514e", "text-halo-color": "rgba(255,255,255,.9)", "text-halo-width": 1.6 } });
+  }
+
   for (const id of ["sis-sel", "sis-alt", "sis-pto", "ex-act", "br", "sis-otros", ...CAPAS_CLIC]) {
     map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
     map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
@@ -729,6 +742,44 @@ map.on("load", () => {
   ponerBase(baseInicial);
   render(true);
 });
+
+// "SAN JOSÉ DE MAIPO" → "San José de Maipo"
+const nombreComuna = n => String(n || "").toLowerCase().replace(/(^|\s)(\S)/g, (m, e, l) => e + l.toUpperCase())
+  .replace(/\s(De|Del)(?=\s)/g, m => m.toLowerCase());
+// Punto interior lejos de los bordes (aprox. "polo de inaccesibilidad"), para que la etiqueta quede dentro de la comuna
+function centroInterior(anillos) {
+  const ext = anillos[0];
+  const dentro = (x, y) => anillos.reduce((ins, r) => {
+    let c = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+      if ((r[i][1] > y) !== (r[j][1] > y) && x < (r[j][0] - r[i][0]) * (y - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+    return ins !== c;   // dentro del exterior y fuera de los huecos
+  }, false);
+  const distBorde = (x, y) => {
+    let m = Infinity;
+    for (const r of anillos) for (let i = 0; i < r.length - 1; i++) {
+      const [ax, ay] = r[i], [bx, by] = r[i + 1], dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+      const t = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L)) : 0;
+      m = Math.min(m, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+    }
+    return m;
+  };
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of ext) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  let mejor = null;
+  for (let ronda = 0; ronda < 3; ronda++) {   // grilla 16×16 y se refina alrededor del mejor punto
+    const sx = (x1 - x0) / 16, sy = (y1 - y0) / 16;
+    for (let i = 0; i <= 16; i++) for (let j = 0; j <= 16; j++) {
+      const x = x0 + i * sx, y = y0 + j * sy;
+      if (!dentro(x, y)) continue;
+      const d = distBorde(x, y);
+      if (!mejor || d > mejor.d) mejor = { x, y, d };
+    }
+    if (!mejor) return ext[0];
+    [x0, x1, y0, y1] = [mejor.x - 2 * sx, mejor.x + 2 * sx, mejor.y - 2 * sy, mejor.y + 2 * sy];
+  }
+  return [mejor.x, mejor.y];
+}
 
 // ---------- Controles
 const cont = document.getElementById("sistemas");
