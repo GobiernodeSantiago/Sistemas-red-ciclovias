@@ -245,7 +245,7 @@ const fmt = (x, d = 1) => Number(x).toLocaleString("es-CL", { minimumFractionDig
 
 document.getElementById("subtitulo").textContent =
   `Red de ciclovías existentes: ${fmt(D.red_existente.km, 0)} km ` +
-  `(tramos a ≤ ${D.tolerancia_m} m se consideran conectados).`;
+  `(ciclovías a ≤ ${D.tolerancia_m} m se consideran conectadas).`;
 document.getElementById("nota").textContent =
   `Sin corrección topológica: la conectividad se estima por cercanía (≤ ${D.tolerancia_m} m). ` +
   `"Km por la red" = distancia recorrida por ciclovías existentes desde el sistema. ` +
@@ -797,11 +797,15 @@ function render(encuadrar) {
     return;
   }
   const st = D.stats[key];
-  let kmAct = 0, nAct = 0;
+  // se cuentan ciclovías (ejes con nombre distinto), no tramos de la capa
+  let kmAct = 0;
+  const ejesAct = new Set(), ejesTrib = new Set();
   for (const f of D.geo.existentes.features) {
-    const p = f.properties, hh = minProp(p, "h"), vv = minProp(p, modo);
-    if (hh != null && hh >= 1 && vv != null && vv <= umbral) { kmAct += p.km; nAct++; }
+    const p = f.properties, hh = minProp(p, "h"), vv = minProp(p, modo), eje = String(p.EJE_VIA).trim().toLowerCase();
+    if (hh == 1) ejesTrib.add(eje);
+    if (hh != null && hh >= 1 && vv != null && vv <= umbral) { kmAct += p.km; ejesAct.add(eje); }
   }
+  const nCic = n => `${fmt(n, 0)} ${n === 1 ? "ciclovía" : "ciclovías"}`;
   // km del sistema por tipo de ciclovía (en el orden de la leyenda)
   const porTipo = {};
   for (const f of D.geo.sistemas.features)
@@ -815,10 +819,10 @@ function render(encuadrar) {
   const sis = varios ? "los sistemas" : "el sistema";
   document.getElementById("kpis").innerHTML = `
     <div class="kpi"><b>${fmt(st.km_sistema)} km</b><span>Sistema (${fmt(st.km_nuevos)} km nuevos · ${fmt(st.km_existentes_sistema)} km existentes)</span></div>
-    <div class="kpi"><b>${fmt(st.km_nivel1)} km</b><span>Tributarias directas (${st.tramos_nivel1} tramos a ≤ ${D.tolerancia_m} m)</span></div>
+    <div class="kpi"><b>${fmt(st.km_nivel1)} km</b><span>Tributarias directas (${nCic(ejesTrib.size)} a ≤ ${D.tolerancia_m} m)</span></div>
     <div class="kpi"><b>${fmt(st.km_sistema + st.km_nivel1)} km</b><span>${varios ? "Sistemas" : "Sistema"} + tributarias
       directas</span></div>
-    <div class="kpi"><b>${fmt(kmAct)} km</b><span>Red activada con el umbral actual (${nAct} tramos)</span></div>
+    <div class="kpi"><b>${fmt(kmAct)} km</b><span>Red activada con el umbral actual (${nCic(ejesAct.size)})</span></div>
     <div class="kpi wide"><span>Km de ${sis} por tipo de ciclovía</span>
       <div class="barraTipos">${tipos.map(t => `<div style="flex:${porTipo[t.tipo]};background:${relleno(t)}"
         title="${t.etiqueta}: ${fmt(porTipo[t.tipo])} km"></div>`).join("")}</div>
