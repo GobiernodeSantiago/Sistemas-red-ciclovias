@@ -6,8 +6,8 @@
 <title>Red Ciclovías por Sistema</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="data/datos.js?v=202610012125"></script>
-<script src="data/capas.js?v=202610012125"></script>
+<script src="data/datos.js?v=202610020956"></script>
+<script src="data/capas.js?v=202610020956"></script>
 <script src="config.js"></script>
 <script src="config.local.js"></script><!-- claves privadas: sólo existe en el computador local, no se publica -->
 <style>
@@ -406,6 +406,9 @@ const CAPAS_REF = [
       ["Puntaje", p.score], ["Escala", p.escala], ["Comunas", p.comunas], ["Costo estimado", p.costo_total_MCLP != null ?
       fmt(p.costo_total_MCLP, 0) + " MM$" : null], ["Pendiente media / máx.", p.pend_media_pct != null ?
       `${fmt(p.pend_media_pct)} % / ${fmt(p.pend_max_pct)} %` : null], ["Largo", km2(p.km_geom)], ["Comentario", p.explicacion]]] },
+  { id: "proy-ejec", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: en ejecución",
+    color: "#0b6e4f", ancho: 3.5, filtro: ["==", ["get", "ETAPA"], "ejecución"], f: p => p.ETAPA === "ejecución",
+    popup: p => popProy(p) },
   { id: "proy-dis", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: en diseño",
     color: "#1baf7a", ancho: 2.5, filtro: ["==", ["get", "ETAPA"], "diseño"], f: p => p.ETAPA === "diseño",
     popup: p => popProy(p) },
@@ -464,7 +467,7 @@ function imagenCuadro(color, lado = 14, borde = 2) {
 }
 function popProy(p) {
   return [p.EJE_VIA || "Ciclovía proyectada", [["Comuna", p.COMUNA], ["Tramo", unir(p.INICIO, p.FIN)], ["Tipo", p.TIPO],
-    ["Etapa", p.Etapa_det], ["Cartera", p.CARTERA], ["Proyecto", p.NOMBRE_PRO], ["Normativa", p.NORMATIVA], ["Largo", km2(p.km_geom)]]];
+    ["Etapa", p.ETAPA_DET || p.Etapa_det || p.ETAPA], ["Cartera", p.CARTERA], ["Proyecto", p.NOMBRE_PRO], ["Normativa", p.NORMATIVA], ["Largo", km2(p.km_geom)]]];
 }
 const colorExpr = c => typeof c.color === "string" ? c.color :
   ["match", ["get", c.color.campo], ...c.color.items.flatMap(([v, col]) => [v, col]), c.color.otro];
