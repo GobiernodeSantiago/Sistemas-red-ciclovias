@@ -140,22 +140,40 @@
   .filaTipo svg { flex: none; }
   .filaTipo span { flex: 1; display: inline; font-size: 12px; color: var(--ink); }
   .filaTipo b { display: inline; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  #comparar .cmp-tit { font-size: 11.5px; font-weight: 600; color: var(--ink); margin: 12px 0 4px; }
-  .cmp-fila { display: grid; grid-template-columns: 96px 1fr 58px 50px; align-items: center; gap: 6px; font-size: 11.5px;
-    padding: 2px 0; color: var(--ink-2); }
-  .cmp-fila > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmp-fila b { font-weight: 500; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .cmp-fila.max b, .cmp-fila.max > span { font-weight: 700; color: var(--ink); }
-  .cmp-fila small { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .cmp-pista { height: 10px; background: #f0efec; border-radius: 2px; }
+  /* Panel de comparación entre sistemas (abajo al centro del mapa, desplegable) */
+  #cmpPanel { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 3;
+    width: min(980px, calc(100% - 250px)); background: var(--surface); border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.2); display: flex; flex-direction: column; max-height: 48%; }
+  #cmpPanel[hidden] { display: none; }
+  #cmpPanel.cerrado { width: auto; }
+  #cmpCab { display: flex; align-items: center; gap: 10px; border: 0; background: none; cursor: pointer; font: inherit;
+    padding: 8px 14px; text-align: left; color: var(--ink); }
+  #cmpCab b { font-size: 13px; }
+  #cmpCab small { flex: 1; font-size: 11.5px; color: var(--muted); }
+  #cmpCab .chev { font-size: 12px; color: var(--ink-2); transition: transform .15s; }
+  #cmpCab[aria-expanded="false"] .chev { transform: rotate(180deg); }
+  #cmpCuerpo { overflow: auto; padding: 0 14px 10px; border-top: 1px solid var(--line); }
+  #cmpCuerpo[hidden] { display: none; }
+  .cmp-tabla { display: grid; grid-template-columns: 120px minmax(190px, 1.6fr) repeat(3, minmax(130px, 1fr));
+    gap: 0 16px; min-width: 680px; }
+  .cmp-tabla > div { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .cmp-tabla .cab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    font-weight: 600; padding-top: 8px; align-self: end; }
+  .cmp-tabla .nom { font-size: 12px; color: var(--ink); align-self: center; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .cmp-val { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cmp-val b { font-weight: 500; color: var(--ink); }
+  .cmp-val small { color: var(--muted); font-size: 10.5px; margin-left: 4px; }
+  .max .cmp-val b { font-weight: 700; }
+  .cmp-pista { height: 8px; background: #f0efec; border-radius: 2px; margin-top: 3px; }
   .cmp-pista > div { height: 100%; background: var(--accent); border-radius: 2px; }
   .cmp-pista.tipos { background: none; }
   .cmp-pista.tipos > div { display: flex; gap: 2px; background: none; }
   .cmp-pista.tipos > div > div { min-width: 2px; border-radius: 2px; }
-  .cmp-ley { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 10.5px; color: var(--ink-2); margin: 4px 0 2px 102px; }
+  .cmp-ley { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 10.5px; color: var(--ink-2); margin-top: 8px; }
   .cmp-ley span { display: inline-flex; align-items: center; gap: 4px; }
   .cmp-ley i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  .cmp-nota { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin: 8px 0 0; }
+  .cmp-nota { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin: 6px 0 0; }
   .filaTipo small { width: 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 5px 0; cursor: pointer; }
   .ley { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; margin: 6px 0; color: var(--ink-2); }
@@ -182,6 +200,7 @@
     #mapWrap { flex-direction: column; }
     #sv { width: 100%; height: 50%; border-left: 0; border-top: 1px solid var(--line); }
     #panelDer { width: 100%; max-height: 30%; border-left: 0; border-bottom: 1px solid var(--line); }
+    #cmpPanel { width: calc(100% - 20px); }
   }
 </style>
 </head>
@@ -212,12 +231,17 @@
 
     <h2>Indicadores</h2>
     <div class="kpis" id="kpis"></div>
-    <div id="comparar"></div>
 
     <p class="nota" id="nota"></p>
   </aside>
   <div id="mapWrap">
-    <div id="map"></div>
+    <div id="map">
+      <section id="cmpPanel" hidden>
+        <button type="button" id="cmpCab" aria-expanded="true" aria-controls="cmpCuerpo">
+          <b>Comparación entre sistemas</b><small id="cmpResumen"></small><span class="chev">▾</span></button>
+        <div id="cmpCuerpo"></div>
+      </section>
+    </div>
     <section id="sv" hidden>
       <div id="svBar">
         <b id="svTitulo">Street View</b>
@@ -811,7 +835,7 @@ function render(encuadrar) {
   if (!estado.sel.size) {
     document.getElementById("kpis").innerHTML = `<div class="kpi wide"><span>Ningún sistema seleccionado. Elige uno o más
       sistemas para ver la red que activan y sus indicadores.</span></div>`;
-    document.getElementById("comparar").innerHTML = "";
+    document.getElementById("cmpPanel").hidden = true;
     return;
   }
   const st = D.stats[key];
@@ -851,11 +875,11 @@ function render(encuadrar) {
   compararSistemas(tipos, relleno);
 }
 
-// ---------- Comparación entre los sistemas elegidos (con 2 o más): mismos indicadores, uno por sistema, en escala común
+// ---------- Comparación entre los sistemas elegidos (con 2 o más), en un panel desplegable sobre el mapa
 function compararSistemas(tipos, relleno) {
-  const caja = document.getElementById("comparar");
-  const keys = elegidos();
-  if (keys.length < 2) { caja.innerHTML = ""; return; }
+  const panel = document.getElementById("cmpPanel"), keys = elegidos();
+  panel.hidden = keys.length < 2;
+  if (panel.hidden) return;
   const { modo, umbral } = estado;
   const filas = keys.map(k => {
     const st = D.stats[k], porTipo = {}, ejesTrib = new Set(), ejesAct = new Set();
@@ -870,34 +894,44 @@ function compararSistemas(tipos, relleno) {
     return { nombre: D.sistemas.find(s => s.key === k).nombre.replace(/^Sistema\s+/i, ""), st, porTipo,
       trib: ejesTrib.size, kmAct, act: ejesAct.size };
   });
-  const nCic = n => `${fmt(n, 0)} cic.`;
-  // un bloque por indicador: una barra por sistema, todas en la misma escala; se destaca el mayor
-  const bloque = (titulo, valor, detalle) => {
-    const max = Math.max(...filas.map(valor)) || 1;
-    return `<div class="cmp-tit">${titulo}</div>` + filas.map(f => {
-      const v = valor(f);
-      return `<div class="cmp-fila${v === max ? " max" : ""}"><span title="${f.nombre}">${f.nombre}</span>
-        <div class="cmp-pista"><div style="width:${v / max * 100}%"></div></div>
-        <b>${fmt(v)} km</b><small>${detalle ? detalle(f) : ""}</small></div>`;
-    }).join("");
-  };
-  const maxSis = Math.max(...filas.map(f => f.st.km_sistema));
-  const umbralTxt = document.getElementById("umbralTxt").textContent;
-  caja.innerHTML = `<h2>Comparación entre sistemas</h2>
-    <div class="cmp-tit">Km del sistema por tipo de ciclovía</div>
-    ${filas.map(f => `<div class="cmp-fila"><span title="${f.nombre}">${f.nombre}</span>
-      <div class="cmp-pista tipos"><div style="width:${f.st.km_sistema / maxSis * 100}%">${tipos.filter(t => f.porTipo[t.tipo] > 0)
+  const nCic = n => `${fmt(n, 0)} ${n === 1 ? "ciclovía" : "ciclovías"}`;
+  // columnas: cada una con su escala, común a todos los sistemas; se destaca el mayor valor
+  const cols = [
+    { cab: "Km del sistema por tipo", v: f => f.st.km_sistema, det: f => `${fmt(f.st.km_nuevos)} nuevos`, tipos: true },
+    { cab: "Tributarias directas", v: f => f.st.km_nivel1, det: f => nCic(f.trib) },
+    { cab: "Sistema + tributarias", v: f => f.st.km_sistema + f.st.km_nivel1 },
+    { cab: `Red activada (${document.getElementById("umbralTxt").textContent})`, v: f => f.kmAct, det: f => nCic(f.act) },
+  ];
+  cols.forEach(c => c.max = Math.max(...filas.map(c.v)) || 1);
+  const barra = (c, f) => c.tipos
+    ? `<div class="cmp-pista tipos"><div style="width:${c.v(f) / c.max * 100}%">${tipos.filter(t => f.porTipo[t.tipo] > 0)
         .map(t => `<div style="flex:${f.porTipo[t.tipo]};background:${relleno(t)}"
-          title="${f.nombre} · ${t.etiqueta}: ${fmt(f.porTipo[t.tipo])} km (${fmt(f.porTipo[t.tipo] / f.st.km_sistema * 100, 0)} %)"></div>`)
-        .join("")}</div></div>
-      <b>${fmt(f.st.km_sistema)} km</b><small>${fmt(f.st.km_nuevos)} nuevos</small></div>`).join("")}
+          title="${f.nombre} · ${t.etiqueta}: ${fmt(f.porTipo[t.tipo])} km (${fmt(f.porTipo[t.tipo] / c.v(f) * 100, 0)} %)"></div>`)
+        .join("")}</div></div>`
+    : `<div class="cmp-pista"><div style="width:${c.v(f) / c.max * 100}%"></div></div>`;
+  document.getElementById("cmpResumen").textContent = `${filas.length} sistemas`;
+  document.getElementById("cmpCuerpo").innerHTML = `<div class="cmp-tabla">
+      <div class="cab">Sistema</div>${cols.map(c => `<div class="cab">${c.cab}</div>`).join("")}
+      ${filas.map(f => `<div class="nom" title="${f.nombre}">${f.nombre}</div>` + cols.map(c =>
+        `<div class="${c.v(f) === c.max ? "max" : ""}"><div class="cmp-val"><b>${fmt(c.v(f))} km</b>${c.det ?
+          `<small>${c.det(f)}</small>` : ""}</div>${barra(c, f)}</div>`).join("")).join("")}
+    </div>
     <div class="cmp-ley">${tipos.map(t => `<span><i style="background:${relleno(t)}"></i>${t.etiqueta}</span>`).join("")}</div>
-    ${bloque("Tributarias directas", f => f.st.km_nivel1, f => nCic(f.trib))}
-    ${bloque("Sistema + tributarias directas", f => f.st.km_sistema + f.st.km_nivel1)}
-    ${bloque(`Red activada (${umbralTxt})`, f => f.kmAct, f => nCic(f.act))}
-    <p class="cmp-nota">Cada sistema por separado. Las barras de cada bloque usan la misma escala; en negrita, el mayor valor.
-      Pasa el mouse sobre la barra por tipo para ver el detalle.</p>`;
+    <p class="cmp-nota">Cada sistema evaluado por separado. Cada columna usa su propia escala, común a todos los sistemas;
+      en negrita, el mayor valor. Pasa el mouse sobre la barra por tipo para ver el detalle.</p>`;
 }
+// desplegar / esconder (se recuerda en este navegador)
+(() => {
+  const panel = document.getElementById("cmpPanel"), cab = document.getElementById("cmpCab"),
+    cuerpo = document.getElementById("cmpCuerpo");
+  const poner = abierto => { cab.setAttribute("aria-expanded", abierto); cuerpo.hidden = !abierto; panel.classList.toggle("cerrado", !abierto); };
+  try { poner(localStorage.getItem("cmpAbierto") !== "0"); } catch (e) { poner(true); }
+  cab.onclick = () => {
+    const abierto = cab.getAttribute("aria-expanded") !== "true";
+    poner(abierto);
+    try { localStorage.setItem("cmpAbierto", abierto ? "1" : "0"); } catch (e) {}
+  };
+})();
 
 // ---------- Leyenda de categorías
 const TRAZO_SVG = { continuo: 'stroke-linecap="round"', guiones: 'stroke-dasharray="7 4"',
