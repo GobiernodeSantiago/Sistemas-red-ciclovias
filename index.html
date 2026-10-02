@@ -142,7 +142,7 @@
   .filaTipo b { display: inline; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
   /* Panel de comparación entre sistemas (abajo al centro del mapa, desplegable) */
   #cmpPanel { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 3;
-    width: min(980px, calc(100% - 250px)); background: var(--surface); border-radius: 10px;
+    width: min(1200px, calc(100% - 20px)); background: var(--surface); border-radius: 10px;
     box-shadow: 0 4px 18px rgba(0,0,0,.2); display: flex; flex-direction: column; max-height: 48%; }
   #cmpPanel[hidden] { display: none; }
   #cmpPanel.cerrado { width: auto; }
@@ -154,14 +154,15 @@
   #cmpCab[aria-expanded="false"] .chev { transform: rotate(180deg); }
   #cmpCuerpo { overflow: auto; padding: 0 14px 10px; border-top: 1px solid var(--line); }
   #cmpCuerpo[hidden] { display: none; }
-  .cmp-tabla { display: grid; grid-template-columns: 120px minmax(190px, 1.6fr) repeat(3, minmax(130px, 1fr));
-    gap: 0 16px; min-width: 680px; }
+  .cmp-tabla { display: grid; gap: 0 12px;
+    grid-template-columns: minmax(84px, 130px) minmax(140px, 1.6fr) repeat(3, minmax(96px, 1fr)); }
   .cmp-tabla > div { padding: 5px 0; border-bottom: 1px solid var(--line); }
-  .cmp-tabla .cab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  .cmp-tabla .cab { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
     font-weight: 600; padding-top: 8px; align-self: end; }
-  .cmp-tabla .nom { font-size: 12px; color: var(--ink); align-self: center; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; }
-  .cmp-val { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cmp-tabla .nom { font-size: 12px; color: var(--ink); align-self: center; }
+  .cmp-val { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .cmp-val b { white-space: nowrap; }
+  .cmp-val small { display: inline-block; white-space: nowrap; }
   .cmp-val b { font-weight: 500; color: var(--ink); }
   .cmp-val small { color: var(--muted); font-size: 10.5px; margin-left: 4px; }
   .max .cmp-val b { font-weight: 700; }
@@ -200,7 +201,6 @@
     #mapWrap { flex-direction: column; }
     #sv { width: 100%; height: 50%; border-left: 0; border-top: 1px solid var(--line); }
     #panelDer { width: 100%; max-height: 30%; border-left: 0; border-bottom: 1px solid var(--line); }
-    #cmpPanel { width: calc(100% - 20px); }
   }
 </style>
 </head>
