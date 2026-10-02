@@ -402,24 +402,25 @@ const AZUL_EXISTENTES = "#5598e7", AZUL_EXISTENTES_OSCURO = "#86b6ef";   // red 
 const CAPAS_REF = [
   { id: "pmc-metro", fuente: "pmc_metro", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Metropolitanos",
     color: "#9a3a0c", ancho: 3.5,
-    resaltar: "cod", capasExtra: ["pmc-metro-res-borde", "pmc-metro-res"],   // al hacer clic se destaca el eje completo
+    resaltar: "cod",   // al hacer clic se destaca el eje completo (mismo código)
     popup: p => [`${p.cod} · ${p.nombre}`, [["Capa", "PMC Metropolitano"], ["Código", p.cod], ["Tramo RS", p.tramo_RS],
       ["Tramo", unir(p.inicio, p.termino)], ["Estado", p.esttado], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "pmc-inter", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Intercomunales",
     color: "#e2701f", ancho: 2.5, filtro: ["==", ["get", "escala"], "Intercomunal"], f: p => p.escala === "Intercomunal",
-    resaltar: "COD_EJE", capasExtra: ["pmc-inter-res-borde", "pmc-inter-res"],
+    resaltar: "COD_EJE",
     popup: p => [`${p.COD_EJE} · ${p.nombre}`, [["Capa", "PMC Intercomunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
       ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "pmc-com", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Comunales",
     color: "#f7b98a", ancho: 2.5, filtro: ["==", ["get", "escala"], "Comunal"], f: p => p.escala === "Comunal",
-    resaltar: "COD_EJE", capasExtra: ["pmc-com-res-borde", "pmc-com-res"], bordeResaltar: "#8a4a1c",
+    resaltar: "COD_EJE",
     popup: p => [`${p.COD_EJE} · ${p.nombre}`, [["Capa", "PMC Comunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
       ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "eva", fuente: "eva", grupo: "Plan Maestro de Ciclovías", nombre: "Factibilidad EVA", ancho: 3,
     color: { campo: "factibilidad", items: [["Alta", "#0ca30c"], ["Par vial (Alta)", "#0ca30c", null], ["Media", "#fab219"],
       ["Par vial (Media)", "#fab219", null], ["Baja", "#d03b3b"], ["Existente", "#2a78d6"], ["Propuesta", "#4a3aa7"]],
       otro: "#a8a7a0", otroNombre: "Sin información" },
-    popup: p => [`${p.nombre} (${p.id})`, [["Factibilidad", p.factibilidad], ["Ranking", p.rank != null ? "#" + p.rank : null],
+    resaltar: "id",
+    popup: p => [`${p.id} · ${p.nombre}`, [["Factibilidad", p.factibilidad], ["Ranking", p.rank != null ? "#" + p.rank : null],
       ["Puntaje", p.score], ["Escala", p.escala], ["Comunas", p.comunas], ["Costo estimado", p.costo_total_MCLP != null ?
       fmt(p.costo_total_MCLP, 0) + " MM$" : null], ["Pendiente media / máx.", p.pend_media_pct != null ?
       `${fmt(p.pend_media_pct)} % / ${fmt(p.pend_max_pct)} %` : null], ["Largo", km2(p.km_geom)], ["Comentario", p.explicacion]]] },
@@ -681,15 +682,6 @@ map.on("load", () => {
     layout: { "line-cap": "round", "line-join": "round" },
     filter: TRAZO.puntos,
     paint: { "line-color": colorTipo, "line-width": 5.5, "line-dasharray": [0, 1.6] } });
-  for (const c of CAPAS_REF.filter(c => c.resaltar)) {   // eje seleccionado con clic: encima de los sistemas
-    const nada = filtroResaltar(c, "\u0000");
-    map.addLayer({ id: c.capasExtra[0], type: "line", source: `ref-${c.fuente}`, filter: nada,
-      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": c.bordeResaltar || "#fff", "line-width": c.ancho + 7 } });
-    map.addLayer({ id: c.capasExtra[1], type: "line", source: `ref-${c.fuente}`, filter: nada,
-      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": c.color, "line-width": c.ancho + 3 } });
-  }
   for (const c of CAPAS_REF.filter(esPunto)) {   // puntos de referencia: encima de todo
     if (c.tipo === "cluster") {
       const src = `ref-${c.fuente}-grupos`;
@@ -1040,9 +1032,44 @@ document.getElementById("leyenda").innerHTML = D.tipos.map(t => `
     ${t.definicion ? `<span class="def">${t.definicion}</span>` : ""}</div></div>`).join("");
 
 // ---------- Popups
-let popResaltado = null;   // ventana del eje destacado (capas PMC)
-// eje con el mismo código, dentro de la misma capa (PMC Comunales e Intercomunales comparten fuente)
-const filtroResaltar = (c, v) => ["all", ...(c.filtro ? [c.filtro] : []), ["==", ["get", c.resaltar], v]];
+// Ciclovía seleccionada con clic: halo amarillo debajo y el resto de su capa atenuado, mientras la ventana esté abierta.
+// Se destaca la ciclovía completa: sistema (skey), existente (EJE_VIA), capas con `resaltar` (código del eje)
+// o, si no, el tramo clicado.
+let popResaltado = null;
+function resaltar(f, cref, pop) {
+  if (popResaltado) popResaltado.remove();   // apaga el resaltado anterior (puede ser de otra capa)
+  const id = f.layer.id, p = f.properties;
+  if (f.layer.type !== "line" || id === "br") return;
+  const igual = k => p[k] != null && p[k] !== "" ? ["==", ["get", k], p[k]] : ["==", ["id"], f.id];
+  let capas, cond, debajo;
+  if (id === "sis-otros") [capas, cond, debajo] = [[id], igual("skey"), id];
+  else if (id.startsWith("sis")) [capas, cond, debajo] = [["sis-sel", "sis-alt", "sis-pto"], igual("skey"), "sis-casing"];
+  else if (id.startsWith("ex")) [capas, cond, debajo] = [[id], igual("EJE_VIA"), id === "ex-act" ? "ex-act-casing" : id];
+  else if (cref) [capas, cond, debajo] = [[id], cref.resaltar ? igual(cref.resaltar) : ["==", ["id"], f.id], id];
+  else return;
+  const halo = `halo-${f.layer.source}`;
+  if (!map.getLayer(halo)) map.addLayer({ id: halo, type: "line", source: f.layer.source,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#ffd60a", "line-opacity": 0.75, "line-blur": 1 } });
+  const ancho = map.getPaintProperty(id, "line-width");
+  map.setPaintProperty(halo, "line-width", (typeof ancho === "number" ? ancho : 4) + 10);
+  map.setFilter(halo, ["all", ...(cref?.filtro ? [cref.filtro] : []), cond]);
+  map.setLayoutProperty(halo, "visibility", "visible");
+  map.moveLayer(halo, debajo);
+  const antes = capas.map(c => [c, map.getPaintProperty(c, "line-opacity")]);
+  for (const [c, op] of antes) {
+    const o = op ?? 1;
+    if (Array.isArray(o) && JSON.stringify(o).includes("zoom")) continue;
+    map.setPaintProperty(c, "line-opacity", ["case", cond, 1, typeof o === "number" ? o * 0.3 : 0.25]);
+  }
+  popResaltado = pop;
+  pop.on("close", () => {
+    if (popResaltado !== pop) return;
+    popResaltado = null;
+    map.setLayoutProperty(halo, "visibility", "none");
+    for (const [c, op] of antes) map.setPaintProperty(c, "line-opacity", op ?? null);
+  });
+}
 function popup(e) {
   const capas = ["sis-sel", "sis-alt", "sis-pto", "br", "ex-act", "sis-otros", ...CAPAS_CLIC, "ex-base"]
     .filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
@@ -1075,19 +1102,7 @@ function popup(e) {
   const pop = new maplibregl.Popup({ maxWidth: "320px" }).setLngLat(e.lngLat)
     .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a>
       ${trazo ? `<br><a href="#" class="perfilLink">⛰ Ver perfil de elevación del tramo</a>` : ""}</div>`).addTo(map);
-  if (cref?.resaltar) {   // destacar el eje completo y atenuar el resto de la capa mientras la ventana esté abierta
-    const filtro = v => filtroResaltar(cref, v);
-    if (popResaltado) popResaltado.remove();   // apaga el resaltado anterior (puede ser de otra capa)
-    cref.capasExtra.forEach(id => map.setFilter(id, filtro(p[cref.resaltar])));
-    map.setPaintProperty(cref.id, "line-opacity", 0.3);
-    popResaltado = pop;
-    pop.on("close", () => {
-      if (popResaltado !== pop) return;   // ya se seleccionó otro eje
-      popResaltado = null;
-      cref.capasExtra.forEach(id => map.setFilter(id, filtro("\u0000")));
-      map.setPaintProperty(cref.id, "line-opacity", cref.opacidad ?? 0.9);
-    });
-  }
+  resaltar(f, cref, pop);
   pop.getElement().querySelector(".svLink").onclick = ev => { ev.preventDefault(); pop.remove(); abrirSV(e.lngLat, rumbo); };
   if (trazo) pop.getElement().querySelector(".perfilLink").onclick = ev => {
     ev.preventDefault(); pop.remove();
