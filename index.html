@@ -236,10 +236,10 @@
   </aside>
   <div id="mapWrap">
     <div id="map">
-      <section id="cmpPanel" hidden>
-        <button type="button" id="cmpCab" aria-expanded="true" aria-controls="cmpCuerpo">
+      <section id="cmpPanel" class="cerrado" hidden>
+        <button type="button" id="cmpCab" aria-expanded="false" aria-controls="cmpCuerpo">
           <b>Comparación entre sistemas</b><small id="cmpResumen"></small><span class="chev">▾</span></button>
-        <div id="cmpCuerpo"></div>
+        <div id="cmpCuerpo" hidden></div>
       </section>
     </div>
     <section id="sv" hidden>
@@ -971,17 +971,13 @@ function compararSistemas(tipos, relleno) {
     <p class="cmp-nota">Cada sistema evaluado por separado. Cada columna usa su propia escala, común a todos los sistemas;
       en negrita, el mayor valor. Pasa el mouse sobre la barra por tipo para ver el detalle.</p>`;
 }
-// desplegar / esconder (se recuerda en este navegador)
+// desplegar / esconder: parte cerrado, para no tapar el mapa
 (() => {
   const panel = document.getElementById("cmpPanel"), cab = document.getElementById("cmpCab"),
     cuerpo = document.getElementById("cmpCuerpo");
   const poner = abierto => { cab.setAttribute("aria-expanded", abierto); cuerpo.hidden = !abierto; panel.classList.toggle("cerrado", !abierto); };
-  try { poner(localStorage.getItem("cmpAbierto") !== "0"); } catch (e) { poner(true); }
-  cab.onclick = () => {
-    const abierto = cab.getAttribute("aria-expanded") !== "true";
-    poner(abierto);
-    try { localStorage.setItem("cmpAbierto", abierto ? "1" : "0"); } catch (e) {}
-  };
+  poner(false);
+  cab.onclick = () => poner(cab.getAttribute("aria-expanded") !== "true");
 })();
 
 // ---------- Leyenda de categorías
