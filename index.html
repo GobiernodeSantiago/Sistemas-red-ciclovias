@@ -255,7 +255,7 @@ const capa = (tiles, atr, max = 19) => ({ tiles, atr, max });
 // Google: API oficial si hay clave; si no, URLs directas (no oficiales) sólo si googleNoOficial = true en config.js
 const gDirecto = lyrs => [0, 1, 2, 3].map(n => `https://mt${n}.google.com/vt/lyrs=${lyrs}&hl=es&x={x}&y={y}&z={z}`);
 const google = (id, nombre, oficial, lyrs, oscuro) => GKEY ? { id, nombre, grupo: "Google", oscuro, google: oficial } :
-  CFG.googleNoOficial ? { id, nombre, grupo: "Google (acceso no oficial)", oscuro, capas: [capa(gDirecto(lyrs), "Mapa © Google", 21)] } : null;
+  CFG.googleNoOficial ? { id, nombre, grupo: "Google", oscuro, capas: [capa(gDirecto(lyrs), "Mapa © Google", 21)] } : null;
 // Mapbox (Static Tiles API, oficial) sólo si hay mapboxToken en config.js
 const MBTOKEN = (CFG.mapboxToken || "").trim();
 const ATR_MAPBOX = '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> ' + ATR_OSM;
@@ -263,10 +263,10 @@ const mapbox = (id, nombre, estilo, oscuro) => MBTOKEN ? { id, nombre, grupo: "M
   [`https://api.mapbox.com/styles/v1/mapbox/${estilo}/tiles/512/{z}/{x}/{y}@2x?access_token=${encodeURIComponent(MBTOKEN)}`],
   ATR_MAPBOX, 22), size: 512 }] } : null;
 const BASES = [
-  { id: "carto-claro", nombre: "CARTO claro", grupo: "Mapas libres (datos OpenStreetMap)", capas: [] },  // vectorial, siempre debajo
-  { id: "osm", nombre: "OpenStreetMap estándar", grupo: "Mapas libres (datos OpenStreetMap)",
+  { id: "carto-claro", nombre: "CARTO claro", grupo: "Mapas libres", capas: [] },  // vectorial, siempre debajo
+  { id: "osm", nombre: "OpenStreetMap estándar", grupo: "Mapas libres",
     capas: [capa(["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], ATR_OSM)] },
-  { id: "cyclosm", nombre: "CyclOSM (ciclovías)", grupo: "Mapas libres (datos OpenStreetMap)",
+  { id: "cyclosm", nombre: "CyclOSM (ciclovías)", grupo: "Mapas libres",
     capas: [capa(abc("https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"), "CyclOSM · " + ATR_OSM, 20)] },
   { id: "s2", nombre: "Sentinel-2 sin nubes 2023 (EOX)", grupo: "Satélite", oscuro: true,
     capas: [capa(["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg"],
@@ -275,11 +275,11 @@ const BASES = [
   { id: "esri-hibrido", nombre: "Esri satélite + calles", grupo: "Satélite", oscuro: true, capas: [
     capa(ESRI("World_Imagery"), ATR_ESRI), capa(ESRI("Reference/World_Transportation"), ""),
     capa(ESRI("Reference/World_Boundaries_and_Places"), "")] },
-  { id: "esri-calles", nombre: "Esri calles", grupo: "Esri (uso gratuito, no libre)", capas: [capa(ESRI("World_Street_Map"), ATR_ESRI)] },
-  { id: "esri-topo", nombre: "Esri topográfico", grupo: "Esri (uso gratuito, no libre)", capas: [capa(ESRI("World_Topo_Map"), ATR_ESRI)] },
-  { id: "esri-gris", nombre: "Esri gris claro", grupo: "Esri (uso gratuito, no libre)",
+  { id: "esri-calles", nombre: "Esri calles", grupo: "Esri", capas: [capa(ESRI("World_Street_Map"), ATR_ESRI)] },
+  { id: "esri-topo", nombre: "Esri topográfico", grupo: "Esri", capas: [capa(ESRI("World_Topo_Map"), ATR_ESRI)] },
+  { id: "esri-gris", nombre: "Esri gris claro", grupo: "Esri",
     capas: [capa(ESRI("Canvas/World_Light_Gray_Base"), ATR_ESRI, 16)] },
-  { id: "esri-gris-osc", nombre: "Esri gris oscuro", grupo: "Esri (uso gratuito, no libre)", oscuro: true,
+  { id: "esri-gris-osc", nombre: "Esri gris oscuro", grupo: "Esri", oscuro: true,
     capas: [capa(ESRI("Canvas/World_Dark_Gray_Base"), ATR_ESRI, 16)] },
   mapbox("mapbox-calles", "Mapbox calles", "streets-v12"),
   mapbox("mapbox-claro", "Mapbox claro", "light-v11"),
