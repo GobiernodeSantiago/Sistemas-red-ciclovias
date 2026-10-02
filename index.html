@@ -801,12 +801,12 @@ function render(encuadrar) {
     <div class="kpi"><b>${fmt(st.km_sistema)} km</b><span>Sistema (${fmt(st.km_nuevos)} km nuevos · ${fmt(st.km_existentes_sistema)} km existentes)</span></div>
     <div class="kpi"><b>${fmt(st.km_nivel1)} km</b><span>Tributarias directas (${st.tramos_nivel1} tramos a ≤ ${D.tolerancia_m} m)</span></div>
     <div class="kpi"><b>${fmt(kmAct)} km</b><span>Red activada con el umbral actual (${nAct} tramos)</span></div>
-    <div class="kpi"><b>${fmt(kmIntegrados)} km</b><span>Ciclovías existentes hoy desconectadas que se suman a la red continua</span></div>
-    <div class="kpi wide"><b>${fmt(st.km_red_conectada, 0)} km <small style="font-size:12px;color:var(--ink-2);font-weight:400">
-      (hoy ${fmt(st.km_mayor_previa, 0)} km · +${fmt(ganancia, 0)} km)</small></b>
-      <span>Red continua al ejecutar ${varios ? "los sistemas elegidos" : "el sistema"}, comparada con la red continua existente
-      más larga que ${varios ? "tocan" : "toca"} hoy${st.piezas_sistema > 1 ? ` · ⚠ ${varios ? "los sistemas elegidos forman" :
-      "el sistema queda en"} ${st.piezas_sistema} redes separadas entre sí` : ""}</span></div>`;
+    <div class="kpi"><b>${fmt(kmIntegrados)} km</b><span>Ciclovías existentes hoy aisladas que ${varios ? "los sistemas conectan" :
+      "el sistema conecta"}</span></div>
+    <div class="kpi wide"><b>${fmt(st.km_red_conectada, 0)} km</b>
+      <span>Red que se formará al construir ${varios ? "los sistemas elegidos" : "el sistema"}: sus ciclovías nuevas más todas
+      las existentes que quedan conectadas a ${varios ? "ellos" : "él"}${st.piezas_sistema > 1 ? `<br>⚠ No queda como una sola
+      red: ${varios ? "los sistemas elegidos forman" : "el sistema queda en"} ${st.piezas_sistema} redes separadas entre sí` : ""}</span></div>`;
 }
 
 // ---------- Leyenda de categorías
