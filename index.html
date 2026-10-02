@@ -172,6 +172,18 @@
   .cmp-pista.tipos { background: none; }
   .cmp-pista.tipos > div { display: flex; gap: 2px; background: none; }
   .cmp-pista.tipos > div > div { min-width: 2px; border-radius: 2px; }
+  .cmp-pista.tipos { cursor: default; }
+  .cmp-pista.tipos:hover > div > div { opacity: .55; }
+  .cmp-pista.tipos:hover > div > div:hover { opacity: 1; }
+  #cmpTip { position: fixed; z-index: 50; pointer-events: none; background: #fff; border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.22); padding: 8px 10px; font-size: 12px; color: var(--ink); }
+  #cmpTip[hidden] { display: none; }
+  #cmpTip table { border-collapse: collapse; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  #cmpTip td { padding: 2px 0 2px 12px; text-align: right; white-space: nowrap; color: var(--ink-2); }
+  #cmpTip td:first-child { padding-left: 0; text-align: left; }
+  #cmpTip i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  #cmpTip tr.on td { color: var(--ink); font-weight: 700; }
+  #cmpTip tr.tot td { border-top: 1px solid var(--line); color: var(--ink); font-weight: 600; padding-top: 4px; }
   .cmp-ley { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 10.5px; color: var(--ink-2); margin-top: 8px; }
   .cmp-ley span { display: inline-flex; align-items: center; gap: 4px; }
   .cmp-ley i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
@@ -959,23 +971,44 @@ function compararSistemas(tipos, relleno) {
     { cab: `Red activada (${document.getElementById("umbralTxt").textContent})`, v: f => f.kmAct, det: f => nCic(f.act) },
   ];
   cols.forEach(c => c.max = Math.max(...filas.map(c.v)) || 1);
-  const barra = (c, f) => c.tipos
-    ? `<div class="cmp-pista tipos"><div style="width:${c.v(f) / c.max * 100}%">${tipos.filter(t => f.porTipo[t.tipo] > 0)
-        .map(t => `<div style="flex:${f.porTipo[t.tipo]};background:${relleno(t)}"
-          title="${f.nombre} · ${t.etiqueta}: ${fmt(f.porTipo[t.tipo])} km (${fmt(f.porTipo[t.tipo] / c.v(f) * 100, 0)} %)"></div>`)
+  window.cmpDatos = { filas, tipos, relleno };
+  const barra = (c, f, i) => c.tipos
+    ? `<div class="cmp-pista tipos" data-fila="${i}"><div style="width:${c.v(f) / c.max * 100}%">${tipos.filter(t => f.porTipo[t.tipo] > 0)
+        .map(t => `<div data-tipo="${t.tipo}" style="flex:${f.porTipo[t.tipo]};background:${relleno(t)}"></div>`)
         .join("")}</div></div>`
     : `<div class="cmp-pista"><div style="width:${c.v(f) / c.max * 100}%"></div></div>`;
   document.getElementById("cmpResumen").textContent = `${filas.length} sistemas`;
   document.getElementById("cmpCuerpo").innerHTML = `<div class="cmp-tabla">
       <div class="cab">Sistema</div>${cols.map(c => `<div class="cab">${c.cab}</div>`).join("")}
-      ${filas.map(f => `<div class="nom" title="${f.nombre}">${f.nombre}</div>` + cols.map(c =>
+      ${filas.map((f, i) => `<div class="nom" title="${f.nombre}">${f.nombre}</div>` + cols.map(c =>
         `<div class="${c.v(f) === c.max ? "max" : ""}"><div class="cmp-val"><b>${fmt(c.v(f))} km</b>${c.det ?
-          `<small>${c.det(f)}</small>` : ""}</div>${barra(c, f)}</div>`).join("")).join("")}
+          `<small>${c.det(f)}</small>` : ""}</div>${barra(c, f, i)}</div>`).join("")).join("")}
     </div>
     <div class="cmp-ley">${tipos.map(t => `<span><i style="background:${relleno(t)}"></i>${t.etiqueta}</span>`).join("")}</div>
     <p class="cmp-nota">Cada sistema evaluado por separado. Cada columna usa su propia escala, común a todos los sistemas;
       en negrita, el mayor valor. Pasa el mouse sobre la barra por tipo para ver el detalle.</p>`;
 }
+// ventana con el detalle de km por tipo al pasar el mouse por la barra de un sistema
+(() => {
+  const tip = document.createElement("div");
+  tip.id = "cmpTip"; tip.hidden = true; document.body.appendChild(tip);
+  const cuerpo = document.getElementById("cmpCuerpo");
+  cuerpo.addEventListener("mousemove", e => {
+    const pista = e.target.closest(".cmp-pista.tipos");
+    if (!pista || !window.cmpDatos) { tip.hidden = true; return; }
+    const { filas, tipos, relleno } = window.cmpDatos, f = filas[+pista.dataset.fila];
+    const activo = e.target.dataset.tipo, total = f.st.km_sistema;
+    tip.innerHTML = `<b>${f.nombre}</b><table>${tipos.filter(t => f.porTipo[t.tipo] > 0).map(t =>
+        `<tr class="${t.tipo === activo ? "on" : ""}"><td><i style="background:${relleno(t)}"></i>${t.etiqueta}</td>
+          <td>${fmt(f.porTipo[t.tipo])} km</td><td>${fmt(f.porTipo[t.tipo] / total * 100, 0)} %</td></tr>`).join("")}
+        <tr class="tot"><td>Total</td><td>${fmt(total)} km</td><td>100 %</td></tr></table>`;
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px";
+    tip.style.top = Math.max(8, e.clientY - h - 12) + "px";
+  });
+  cuerpo.addEventListener("mouseleave", () => tip.hidden = true);
+})();
 // desplegar / esconder: parte cerrado, para no tapar el mapa
 (() => {
   const panel = document.getElementById("cmpPanel"), cab = document.getElementById("cmpCab"),
