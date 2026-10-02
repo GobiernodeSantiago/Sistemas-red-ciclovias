@@ -407,11 +407,13 @@ const CAPAS_REF = [
       ["Tramo", unir(p.inicio, p.termino)], ["Estado", p.esttado], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "pmc-inter", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Intercomunales",
     color: "#e2701f", ancho: 2.5, filtro: ["==", ["get", "escala"], "Intercomunal"], f: p => p.escala === "Intercomunal",
-    popup: p => [p.nombre, [["Capa", "PMC Intercomunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
+    resaltar: "COD_EJE", capasExtra: ["pmc-inter-res-borde", "pmc-inter-res"],
+    popup: p => [`${p.COD_EJE} · ${p.nombre}`, [["Capa", "PMC Intercomunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
       ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "pmc-com", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Comunales",
     color: "#f7b98a", ancho: 2.5, filtro: ["==", ["get", "escala"], "Comunal"], f: p => p.escala === "Comunal",
-    popup: p => [p.nombre, [["Capa", "PMC Comunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
+    resaltar: "COD_EJE", capasExtra: ["pmc-com-res-borde", "pmc-com-res"], bordeResaltar: "#8a4a1c",
+    popup: p => [`${p.COD_EJE} · ${p.nombre}`, [["Capa", "PMC Comunal"], ["Código", p.COD_EJE], ["Comunas", p.comunas],
       ["Macrozona", p.macrozona], ["Anteproyecto", p.anteproyec], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "eva", fuente: "eva", grupo: "Plan Maestro de Ciclovías", nombre: "Factibilidad EVA", ancho: 3,
     color: { campo: "factibilidad", items: [["Alta", "#0ca30c"], ["Par vial (Alta)", "#0ca30c", null], ["Media", "#fab219"],
@@ -680,10 +682,10 @@ map.on("load", () => {
     filter: TRAZO.puntos,
     paint: { "line-color": colorTipo, "line-width": 5.5, "line-dasharray": [0, 1.6] } });
   for (const c of CAPAS_REF.filter(c => c.resaltar)) {   // eje seleccionado con clic: encima de los sistemas
-    const nada = ["==", ["get", c.resaltar], "\u0000"];
+    const nada = filtroResaltar(c, "\u0000");
     map.addLayer({ id: c.capasExtra[0], type: "line", source: `ref-${c.fuente}`, filter: nada,
       layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#fff", "line-width": c.ancho + 7 } });
+      paint: { "line-color": c.bordeResaltar || "#fff", "line-width": c.ancho + 7 } });
     map.addLayer({ id: c.capasExtra[1], type: "line", source: `ref-${c.fuente}`, filter: nada,
       layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
       paint: { "line-color": c.color, "line-width": c.ancho + 3 } });
@@ -1038,7 +1040,9 @@ document.getElementById("leyenda").innerHTML = D.tipos.map(t => `
     ${t.definicion ? `<span class="def">${t.definicion}</span>` : ""}</div></div>`).join("");
 
 // ---------- Popups
-let popResaltado = null;   // ventana del eje destacado (PMC Metropolitanos)
+let popResaltado = null;   // ventana del eje destacado (capas PMC)
+// eje con el mismo código, dentro de la misma capa (PMC Comunales e Intercomunales comparten fuente)
+const filtroResaltar = (c, v) => ["all", ...(c.filtro ? [c.filtro] : []), ["==", ["get", c.resaltar], v]];
 function popup(e) {
   const capas = ["sis-sel", "sis-alt", "sis-pto", "br", "ex-act", "sis-otros", ...CAPAS_CLIC, "ex-base"]
     .filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
@@ -1072,7 +1076,8 @@ function popup(e) {
     .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a>
       ${trazo ? `<br><a href="#" class="perfilLink">⛰ Ver perfil de elevación del tramo</a>` : ""}</div>`).addTo(map);
   if (cref?.resaltar) {   // destacar el eje completo y atenuar el resto de la capa mientras la ventana esté abierta
-    const filtro = v => ["==", ["get", cref.resaltar], v];
+    const filtro = v => filtroResaltar(cref, v);
+    if (popResaltado) popResaltado.remove();   // apaga el resaltado anterior (puede ser de otra capa)
     cref.capasExtra.forEach(id => map.setFilter(id, filtro(p[cref.resaltar])));
     map.setPaintProperty(cref.id, "line-opacity", 0.3);
     popResaltado = pop;
