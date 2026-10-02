@@ -402,7 +402,8 @@ const AZUL_EXISTENTES = "#5598e7", AZUL_EXISTENTES_OSCURO = "#86b6ef";   // red 
 const CAPAS_REF = [
   { id: "pmc-metro", fuente: "pmc_metro", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Metropolitanos",
     color: "#9a3a0c", ancho: 3.5,
-    popup: p => [p.nombre, [["Capa", "PMC Metropolitano"], ["Código", p.cod], ["Tramo RS", p.tramo_RS],
+    resaltar: "cod", capasExtra: ["pmc-metro-res-borde", "pmc-metro-res"],   // al hacer clic se destaca el eje completo
+    popup: p => [`${p.cod} · ${p.nombre}`, [["Capa", "PMC Metropolitano"], ["Código", p.cod], ["Tramo RS", p.tramo_RS],
       ["Tramo", unir(p.inicio, p.termino)], ["Estado", p.esttado], ["Largo del tramo", km2(p.km_geom)]]] },
   { id: "pmc-inter", fuente: "pmc_ci", grupo: "Plan Maestro de Ciclovías", nombre: "PMC Intercomunales",
     color: "#e2701f", ancho: 2.5, filtro: ["==", ["get", "escala"], "Intercomunal"], f: p => p.escala === "Intercomunal",
@@ -678,6 +679,15 @@ map.on("load", () => {
     layout: { "line-cap": "round", "line-join": "round" },
     filter: TRAZO.puntos,
     paint: { "line-color": colorTipo, "line-width": 5.5, "line-dasharray": [0, 1.6] } });
+  for (const c of CAPAS_REF.filter(c => c.resaltar)) {   // eje seleccionado con clic: encima de los sistemas
+    const nada = ["==", ["get", c.resaltar], "\u0000"];
+    map.addLayer({ id: c.capasExtra[0], type: "line", source: `ref-${c.fuente}`, filter: nada,
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#fff", "line-width": c.ancho + 7 } });
+    map.addLayer({ id: c.capasExtra[1], type: "line", source: `ref-${c.fuente}`, filter: nada,
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": c.color, "line-width": c.ancho + 3 } });
+  }
   for (const c of CAPAS_REF.filter(esPunto)) {   // puntos de referencia: encima de todo
     if (c.tipo === "cluster") {
       const src = `ref-${c.fuente}-grupos`;
@@ -1028,6 +1038,7 @@ document.getElementById("leyenda").innerHTML = D.tipos.map(t => `
     ${t.definicion ? `<span class="def">${t.definicion}</span>` : ""}</div></div>`).join("");
 
 // ---------- Popups
+let popResaltado = null;   // ventana del eje destacado (PMC Metropolitanos)
 function popup(e) {
   const capas = ["sis-sel", "sis-alt", "sis-pto", "br", "ex-act", "sis-otros", ...CAPAS_CLIC, "ex-base"]
     .filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
@@ -1060,6 +1071,18 @@ function popup(e) {
   const pop = new maplibregl.Popup({ maxWidth: "320px" }).setLngLat(e.lngLat)
     .setHTML(`<div class="pop">${html}<a href="#" class="svLink">🚶 Ver Street View aquí</a>
       ${trazo ? `<br><a href="#" class="perfilLink">⛰ Ver perfil de elevación del tramo</a>` : ""}</div>`).addTo(map);
+  if (cref?.resaltar) {   // destacar el eje completo y atenuar el resto de la capa mientras la ventana esté abierta
+    const filtro = v => ["==", ["get", cref.resaltar], v];
+    cref.capasExtra.forEach(id => map.setFilter(id, filtro(p[cref.resaltar])));
+    map.setPaintProperty(cref.id, "line-opacity", 0.3);
+    popResaltado = pop;
+    pop.on("close", () => {
+      if (popResaltado !== pop) return;   // ya se seleccionó otro eje
+      popResaltado = null;
+      cref.capasExtra.forEach(id => map.setFilter(id, filtro("\u0000")));
+      map.setPaintProperty(cref.id, "line-opacity", cref.opacidad ?? 0.9);
+    });
+  }
   pop.getElement().querySelector(".svLink").onclick = ev => { ev.preventDefault(); pop.remove(); abrirSV(e.lngLat, rumbo); };
   if (trazo) pop.getElement().querySelector(".perfilLink").onclick = ev => {
     ev.preventDefault(); pop.remove();
