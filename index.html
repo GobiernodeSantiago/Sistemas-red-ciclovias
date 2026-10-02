@@ -426,13 +426,13 @@ const CAPAS_REF = [
       `${fmt(p.pend_media_pct)} % / ${fmt(p.pend_max_pct)} %` : null], ["Largo", km2(p.km_geom)], ["Comentario", p.explicacion]]] },
   { id: "proy-ejec", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: en ejecución",
     color: "#0b6e4f", ancho: 3.5, filtro: ["==", ["get", "ETAPA"], "ejecución"], f: p => p.ETAPA === "ejecución",
-    popup: p => popProy(p) },
+    resaltar: "EJE_VIA", popup: p => popProy(p) },
   { id: "proy-dis", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: en diseño",
     color: "#1baf7a", ancho: 2.5, filtro: ["==", ["get", "ETAPA"], "diseño"], f: p => p.ETAPA === "diseño",
-    popup: p => popProy(p) },
+    resaltar: "EJE_VIA", popup: p => popProy(p) },
   { id: "proy-plan", fuente: "proyectadas", grupo: "Otras ciclovías", nombre: "Proyectadas otras carteras: planificadas",
     color: "#1baf7a", ancho: 2, dash: [2, 1.5], filtro: ["==", ["get", "ETAPA"], "planificadas"], f: p => p.ETAPA === "planificadas",
-    popup: p => popProy(p) },
+    resaltar: "EJE_VIA", popup: p => popProy(p) },
   { id: "chimba", fuente: "chimba", grupo: "Ejes GORE", nombre: "Ruta La Chimba", color: MORADO_GORE, ancho: 4,
     popup: p => [p.Eje || "Ruta La Chimba", [["Capa", "Ruta La Chimba (Eje GORE)"], ["Tramo", p.Tramo], ["Estado", p.estado],
       ["Categoría vial", p.CateVial], ["Sentido de tránsito", p.SentTransi], ["N° pistas", p.NPistas], ["Largo", km2(p.km_geom)]]] },
@@ -1038,8 +1038,8 @@ document.getElementById("leyenda").innerHTML = D.tipos.map(t => `
 let popResaltado = null;
 function resaltar(f, cref, pop) {
   if (popResaltado) popResaltado.remove();   // apaga el resaltado anterior (puede ser de otra capa)
-  const id = f.layer.id, p = f.properties;
-  if (f.layer.type !== "line" || id === "br") return;
+  const id = f.layer.id, p = f.properties, fuente = f.source || map.getLayer(id)?.source;
+  if (map.getLayer(id)?.type !== "line" || id === "br" || !fuente) return;
   const igual = k => p[k] != null && p[k] !== "" ? ["==", ["get", k], p[k]] : ["==", ["id"], f.id];
   let capas, cond, debajo;
   if (id === "sis-otros") [capas, cond, debajo] = [[id], igual("skey"), id];
@@ -1047,8 +1047,8 @@ function resaltar(f, cref, pop) {
   else if (id.startsWith("ex")) [capas, cond, debajo] = [[id], igual("EJE_VIA"), id === "ex-act" ? "ex-act-casing" : id];
   else if (cref) [capas, cond, debajo] = [[id], cref.resaltar ? igual(cref.resaltar) : ["==", ["id"], f.id], id];
   else return;
-  const halo = `halo-${f.layer.source}`;
-  if (!map.getLayer(halo)) map.addLayer({ id: halo, type: "line", source: f.layer.source,
+  const halo = `halo-${fuente}`;
+  if (!map.getLayer(halo)) map.addLayer({ id: halo, type: "line", source: fuente,
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-color": "#ffd60a", "line-opacity": 0.75, "line-blur": 1 } });
   const ancho = map.getPaintProperty(id, "line-width");
