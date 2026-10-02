@@ -140,6 +140,22 @@
   .filaTipo svg { flex: none; }
   .filaTipo span { flex: 1; display: inline; font-size: 12px; color: var(--ink); }
   .filaTipo b { display: inline; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #comparar .cmp-tit { font-size: 11.5px; font-weight: 600; color: var(--ink); margin: 12px 0 4px; }
+  .cmp-fila { display: grid; grid-template-columns: 96px 1fr 58px 50px; align-items: center; gap: 6px; font-size: 11.5px;
+    padding: 2px 0; color: var(--ink-2); }
+  .cmp-fila > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmp-fila b { font-weight: 500; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cmp-fila.max b, .cmp-fila.max > span { font-weight: 700; color: var(--ink); }
+  .cmp-fila small { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cmp-pista { height: 10px; background: #f0efec; border-radius: 2px; }
+  .cmp-pista > div { height: 100%; background: var(--accent); border-radius: 2px; }
+  .cmp-pista.tipos { background: none; }
+  .cmp-pista.tipos > div { display: flex; gap: 2px; background: none; }
+  .cmp-pista.tipos > div > div { min-width: 2px; border-radius: 2px; }
+  .cmp-ley { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 10.5px; color: var(--ink-2); margin: 4px 0 2px 102px; }
+  .cmp-ley span { display: inline-flex; align-items: center; gap: 4px; }
+  .cmp-ley i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .cmp-nota { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin: 8px 0 0; }
   .filaTipo small { width: 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 5px 0; cursor: pointer; }
   .ley { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; margin: 6px 0; color: var(--ink-2); }
@@ -196,6 +212,7 @@
 
     <h2>Indicadores</h2>
     <div class="kpis" id="kpis"></div>
+    <div id="comparar"></div>
 
     <p class="nota" id="nota"></p>
   </aside>
@@ -794,6 +811,7 @@ function render(encuadrar) {
   if (!estado.sel.size) {
     document.getElementById("kpis").innerHTML = `<div class="kpi wide"><span>Ningún sistema seleccionado. Elige uno o más
       sistemas para ver la red que activan y sus indicadores.</span></div>`;
+    document.getElementById("comparar").innerHTML = "";
     return;
   }
   const st = D.stats[key];
@@ -830,6 +848,55 @@ function render(encuadrar) {
         stroke-width="4" ${TRAZO_SVG[t.trazo] || TRAZO_SVG.continuo}/></svg><span>${t.etiqueta}</span>
         <b>${fmt(porTipo[t.tipo])} km</b><small>${fmt(porTipo[t.tipo] / total * 100, 0)} %</small></div>`).join("")}
     </div>`;
+  compararSistemas(tipos, relleno);
+}
+
+// ---------- Comparación entre los sistemas elegidos (con 2 o más): mismos indicadores, uno por sistema, en escala común
+function compararSistemas(tipos, relleno) {
+  const caja = document.getElementById("comparar");
+  const keys = elegidos();
+  if (keys.length < 2) { caja.innerHTML = ""; return; }
+  const { modo, umbral } = estado;
+  const filas = keys.map(k => {
+    const st = D.stats[k], porTipo = {}, ejesTrib = new Set(), ejesAct = new Set();
+    let kmAct = 0;
+    for (const f of D.geo.existentes.features) {
+      const p = f.properties, hh = p[`h_${k}`], vv = p[`${modo}_${k}`], eje = String(p.EJE_VIA).trim().toLowerCase();
+      if (hh == 1) ejesTrib.add(eje);
+      if (hh != null && hh >= 1 && vv != null && vv <= umbral) { kmAct += p.km; ejesAct.add(eje); }
+    }
+    for (const f of D.geo.sistemas.features)
+      if (f.properties.skey === k) porTipo[f.properties.tipo] = (porTipo[f.properties.tipo] || 0) + f.properties.km;
+    return { nombre: D.sistemas.find(s => s.key === k).nombre.replace(/^Sistema\s+/i, ""), st, porTipo,
+      trib: ejesTrib.size, kmAct, act: ejesAct.size };
+  });
+  const nCic = n => `${fmt(n, 0)} cic.`;
+  // un bloque por indicador: una barra por sistema, todas en la misma escala; se destaca el mayor
+  const bloque = (titulo, valor, detalle) => {
+    const max = Math.max(...filas.map(valor)) || 1;
+    return `<div class="cmp-tit">${titulo}</div>` + filas.map(f => {
+      const v = valor(f);
+      return `<div class="cmp-fila${v === max ? " max" : ""}"><span title="${f.nombre}">${f.nombre}</span>
+        <div class="cmp-pista"><div style="width:${v / max * 100}%"></div></div>
+        <b>${fmt(v)} km</b><small>${detalle ? detalle(f) : ""}</small></div>`;
+    }).join("");
+  };
+  const maxSis = Math.max(...filas.map(f => f.st.km_sistema));
+  const umbralTxt = document.getElementById("umbralTxt").textContent;
+  caja.innerHTML = `<h2>Comparación entre sistemas</h2>
+    <div class="cmp-tit">Km del sistema por tipo de ciclovía</div>
+    ${filas.map(f => `<div class="cmp-fila"><span title="${f.nombre}">${f.nombre}</span>
+      <div class="cmp-pista tipos"><div style="width:${f.st.km_sistema / maxSis * 100}%">${tipos.filter(t => f.porTipo[t.tipo] > 0)
+        .map(t => `<div style="flex:${f.porTipo[t.tipo]};background:${relleno(t)}"
+          title="${f.nombre} · ${t.etiqueta}: ${fmt(f.porTipo[t.tipo])} km (${fmt(f.porTipo[t.tipo] / f.st.km_sistema * 100, 0)} %)"></div>`)
+        .join("")}</div></div>
+      <b>${fmt(f.st.km_sistema)} km</b><small>${fmt(f.st.km_nuevos)} nuevos</small></div>`).join("")}
+    <div class="cmp-ley">${tipos.map(t => `<span><i style="background:${relleno(t)}"></i>${t.etiqueta}</span>`).join("")}</div>
+    ${bloque("Tributarias directas", f => f.st.km_nivel1, f => nCic(f.trib))}
+    ${bloque("Sistema + tributarias directas", f => f.st.km_sistema + f.st.km_nivel1)}
+    ${bloque(`Red activada (${umbralTxt})`, f => f.kmAct, f => nCic(f.act))}
+    <p class="cmp-nota">Cada sistema por separado. Las barras de cada bloque usan la misma escala; en negrita, el mayor valor.
+      Pasa el mouse sobre la barra por tipo para ver el detalle.</p>`;
 }
 
 // ---------- Leyenda de categorías
