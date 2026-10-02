@@ -85,7 +85,7 @@ ESTILO_TIPOS = [
     ("con diseño", "Con diseño", "#b48ee6", "continuo", "Ciclovía ya cuenta con diseño"),
     ("en diseño", "En diseño", "#b48ee6", "puntos", "Ciclovía en etapa de diseño"),
     ("priorizado", "Eje PMC priorizado", "#2eb82e", "continuo", "Ciclovía perteneciente al PMC priorizado por EVA"),
-    ("no evaluado", "Eje PMC no evaluado", "#2eb82e", "guiones",
+    ("no evaluado", "Eje PMC no evaluado", "#2eb82e", "puntos",
      "Ciclovía perteneciente al PMC cuya factibilidad no ha sido evaluada"),
     ("existente", "Existente", "#1b2f7a", "continuo",   # azul marino: distinto de la red existente/activada
      "Ciclovía existente (a evaluar su requerimiento de normalización)"),
